@@ -3,123 +3,338 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Cache-cache GPS</title>
+<meta name="theme-color" content="#0b0a17">
+<title>Dernier cercle — cache-cache GPS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-:root{--bg:#0f1419;--card:#1a222c;--line:#2a3542;--txt:#e8eef5;--mut:#8a98a8;--seek:#ef4444;--hide:#3b82f6;--ok:#22d3a0;--warn:#f59e0b}
+:root{--ink:#0b0a17;--ink2:#14122b;--ink3:#1d1a42;--line:#2f2b5c;--txt:#ece9ff;--mut:#9a96c4;--gas:#8b5cf6;--gasHi:#b79cff;--seek:#ff6a2b;--hide:#3ee0ff;--warn:#ffd23f;--bad:#ff3d6e;--ok:#5dffb0}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-.screen{display:none;position:fixed;inset:0;overflow:auto;padding:max(20px,env(safe-area-inset-top)) 20px 30px}
+html,body{margin:0;height:100%;background:var(--ink);color:var(--txt);font:16px/1.45 'Instrument Sans',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+h1,h2,h3,.disp{font-family:'Big Shoulders Display','Arial Narrow',Impact,sans-serif;font-weight:900;margin:0;letter-spacing:.005em}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--warn);outline-offset:2px}
+.screen{display:none;position:fixed;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
 .screen.on{display:block}
-h1{margin:10px 0 4px;font-size:28px}h2{margin:18px 0 8px;font-size:18px}
-p.sub{color:var(--mut);margin:0 0 20px}
-input,button,select{font:inherit;border-radius:12px;border:1px solid var(--line);padding:14px;width:100%;background:var(--card);color:var(--txt);margin:6px 0}
-input[type=checkbox]{width:auto;margin-right:8px}
-button{background:var(--ok);color:#052e22;font-weight:700;border:0;cursor:pointer}
-button.sec{background:var(--card);color:var(--txt);border:1px solid var(--line)}
-button.red{background:var(--seek);color:#fff}button.blue{background:var(--hide);color:#fff}
-button:disabled{opacity:.4}
-.or{text-align:center;color:var(--mut);margin:10px 0}
-.err{color:#fca5a5;min-height:20px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
-.code{font-size:44px;font-weight:800;letter-spacing:8px;text-align:center;margin:4px 0}
-.row{display:flex;gap:10px}.row>*{flex:1}
-.pl{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
-.pl:last-child{border:0}
-.tag{font-size:12px;padding:2px 8px;border-radius:99px;font-weight:700}
-.tag.seeker{background:var(--seek)}.tag.hider{background:var(--hide)}.tag.none{background:var(--line);color:var(--mut)}
-pre{background:#0b0f14;padding:12px;border-radius:10px;overflow:auto;font-size:13px}
-ol li{margin:6px 0}
-#map{position:absolute;inset:0}
-#hud{position:absolute;z-index:500;left:8px;right:8px;top:max(8px,env(safe-area-inset-top));display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.chip{background:rgba(15,20,25,.9);border:1px solid var(--line);border-radius:12px;padding:6px 8px;text-align:center}
-.chip small{display:block;color:var(--mut);font-size:11px}.chip b{font-size:17px;font-variant-numeric:tabular-nums}
-#banner{position:absolute;z-index:500;left:8px;right:8px;top:calc(max(8px,env(safe-area-inset-top)) + 64px);display:none;background:var(--warn);color:#2b1a00;font-weight:700;border-radius:12px;padding:10px;text-align:center}
-#banner.on{display:block}#banner.bad{background:var(--seek);color:#fff}
-#bottom{position:absolute;z-index:500;left:0;right:0;bottom:0;background:rgba(15,20,25,.96);border-top:1px solid var(--line);padding:10px 14px max(12px,env(safe-area-inset-bottom));max-height:46%;overflow:auto}
-#bottom .head{display:flex;justify-content:space-between;color:var(--mut);font-size:13px}
-.pin{width:30px;height:30px;border-radius:50%;border:3px solid #fff;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,.5)}
-.pin.seeker{background:var(--seek)}.pin.hider{background:var(--hide)}.pin.caught{background:#6b7280}
-.me{width:18px;height:18px;border-radius:50%;background:#22d3a0;border:3px solid #fff;box-shadow:0 0 0 6px rgba(34,211,160,.3)}
-.tgt{font-size:30px}
-.leaflet-tooltip{font-size:12px}
-#prox{position:absolute;z-index:600;left:8px;right:8px;top:calc(max(8px,env(safe-area-inset-top)) + 120px);display:none;background:#b91c1c;color:#fff;font-weight:800;font-size:22px;text-align:center;border-radius:14px;padding:14px;box-shadow:0 4px 20px rgba(0,0,0,.6)}
-#prox.on{display:block}
-#end{background:rgba(0,0,0,.85);z-index:2000;text-align:center;padding-top:25vh}
-#end .big{font-size:34px;font-weight:800;margin:8px 0}
-button.mini{width:auto;padding:4px 10px;margin:0;font-size:13px}
+.wrap{max-width:520px;margin:0 auto;padding:max(22px,env(safe-area-inset-top)) 20px max(28px,env(safe-area-inset-bottom))}
+.bg{background:radial-gradient(120% 60% at 50% 105%,rgba(139,92,246,.32),transparent 60%),repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 44px),repeating-linear-gradient(90deg,rgba(255,255,255,.025) 0 1px,transparent 1px 44px),var(--ink)}
+
+/* boutons & champs */
+.btn{display:block;width:100%;border:0;border-radius:14px;padding:16px 18px;font-weight:700;font-size:17px;cursor:pointer;background:var(--gasHi);color:#150f33;transition:transform .12s,filter .12s}
+.btn:active{transform:scale(.98)}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;color:var(--txt);border:1.5px solid var(--line)}
+.btn.danger{background:var(--seek);color:#2b0d00}
+.btn.sm{display:inline-block;width:auto;padding:8px 14px;font-size:14px;border-radius:10px}
+.btn:disabled{opacity:.35;pointer-events:none}
+.field{display:block;width:100%;background:var(--ink2);border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;font-size:17px;margin:0 0 10px}
+.field::placeholder{color:#6f6a9f}
+.err{color:var(--bad);min-height:22px;margin:6px 0 0;font-size:15px}
+.mut{color:var(--mut)}
+.link{background:none;border:0;color:var(--gasHi);text-decoration:underline;text-underline-offset:3px;padding:8px;cursor:pointer;font-size:15px}
+
+/* accueil */
+.hero{position:relative;margin:4px auto 0;width:min(78vw,330px)}
+.hero svg{width:100%;height:auto;display:block;overflow:visible}
+.ring{fill:none;stroke:var(--gasHi);stroke-width:1.6;stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1.2s cubic-bezier(.6,0,.2,1) forwards;animation-delay:calc(var(--i)*.42s + .2s)}
+.gasfill{fill:rgba(139,92,246,.20);opacity:0;animation:fadein 1.4s ease .3s forwards}
+.holefill{fill:var(--ink);opacity:0;animation:fadein 1s ease 1.9s forwards}
+.dot{opacity:0;animation:fadein .5s ease 2.4s forwards}
+.dot.h{fill:var(--hide)}
+.dot.s{fill:var(--seek)}
+.pulse{transform-box:fill-box;transform-origin:center;animation:pulse 2.2s ease-out 2.6s infinite}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes fadein{to{opacity:1}}
+@keyframes pulse{0%{transform:scale(1);opacity:.7}100%{transform:scale(3.2);opacity:0}}
+.title{font-size:clamp(64px,22vw,112px);line-height:.86;margin:14px 0 10px;text-transform:none}
+.title span{display:block}
+.title .b{color:var(--gasHi)}
+.lead{font-size:18px;max-width:30ch;margin:0 0 22px;color:#cfc9ff}
+.or{display:flex;align-items:center;gap:12px;color:var(--mut);margin:14px 0}
+.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
+.codein{text-align:center;letter-spacing:.5em;font-family:'Big Shoulders Display';font-weight:800;font-size:28px;text-transform:uppercase;padding-left:calc(16px + .5em)}
+
+/* lobby */
+.codebox{display:flex;gap:10px;justify-content:center;margin:8px 0 14px}
+.codebox b{font-family:'Big Shoulders Display';font-weight:900;font-size:64px;line-height:1;width:64px;height:84px;display:flex;align-items:center;justify-content:center;background:var(--ink2);border:1.5px solid var(--line);border-radius:14px}
+.card{background:var(--ink2);border:1.5px solid var(--line);border-radius:18px;padding:16px;margin:14px 0}
+.roster{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.who{display:flex;align-items:center;gap:10px;background:var(--ink3);border-radius:14px;padding:10px 12px;min-width:0;animation:pop .35s cubic-bezier(.3,1.5,.5,1)}
+.who span.n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.av{flex:none;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Big Shoulders Display';font-weight:900;font-size:20px;color:#120d2b}
+.crown{font-size:12px;color:var(--warn);font-weight:700}
+@keyframes pop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+.split{display:flex;gap:10px;margin-top:12px}
+.split div{flex:1;border-radius:14px;padding:12px;text-align:center}
+.split .s{background:rgba(255,106,43,.14);border:1.5px solid rgba(255,106,43,.5)}
+.split .h{background:rgba(62,224,255,.12);border:1.5px solid rgba(62,224,255,.45)}
+.split b{display:block;font-family:'Big Shoulders Display';font-size:38px;line-height:1}
+.switch{display:flex;align-items:center;gap:12px;margin:10px 0 14px;cursor:pointer}
+.switch input{appearance:none;-webkit-appearance:none;width:50px;height:30px;border-radius:99px;background:var(--ink3);border:1.5px solid var(--line);position:relative;margin:0;transition:background .2s;flex:none}
+.switch input:after{content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:var(--mut);transition:transform .2s,background .2s}
+.switch input:checked{background:var(--gas)}
+.switch input:checked:after{transform:translateX(20px);background:#fff}
+.wait{display:flex;gap:6px;justify-content:center;margin:16px 0}
+.wait i{width:9px;height:9px;border-radius:50%;background:var(--gasHi);animation:blink 1.2s infinite}
+.wait i:nth-child(2){animation-delay:.2s}.wait i:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
+
+/* jeu */
+#map{position:absolute;inset:0;background:#0b0a17}
+.leaflet-container{background:#0b0a17;font-family:inherit}
+.leaflet-control-attribution{background:rgba(11,10,23,.7)!important;color:#7d79a8!important;font-size:10px}
+.leaflet-control-attribution a{color:#9a96c4!important}
+#hud{position:absolute;z-index:500;left:8px;right:8px;top:max(8px,env(safe-area-inset-top))}
+.bar{display:grid;grid-template-columns:1.15fr 1fr 1fr;background:rgba(11,10,23,.88);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1.5px solid var(--line);border-radius:16px;overflow:hidden}
+.cell{padding:8px 10px 9px;min-width:0}
+.cell+.cell{border-left:1.5px solid var(--line)}
+.cell .lab{display:block;font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell .val{display:block;font-family:'Big Shoulders Display';font-weight:800;font-size:30px;line-height:1.05;font-variant-numeric:tabular-nums}
+.cell.hot .val{color:var(--bad)}
+#track{display:flex;gap:5px;margin-top:6px}
+#track div{flex:1;text-align:center;font-size:12px;font-weight:600;padding:3px 0;border-radius:8px;background:rgba(11,10,23,.85);border:1.5px solid var(--line);color:var(--mut)}
+#track div.done{color:#5d5890;text-decoration:line-through}
+#track div.now{background:var(--gas);border-color:var(--gasHi);color:#fff}
+#banner{position:absolute;z-index:500;left:8px;right:8px;top:calc(max(8px,env(safe-area-inset-top)) + 112px);display:none;border-radius:14px;padding:11px 14px;text-align:center;font-weight:700;background:var(--ink3);border:1.5px solid var(--gasHi)}
+#banner.on{display:block}
+#banner.bad{background:var(--bad);border-color:var(--bad);color:#fff}
+#prox{position:absolute;z-index:700;left:12px;right:12px;top:calc(max(8px,env(safe-area-inset-top)) + 170px);display:none;text-align:center;background:rgba(255,61,110,.95);border-radius:20px;padding:14px 16px;box-shadow:0 10px 40px rgba(255,61,110,.45)}
+#prox.on{display:block;animation:pop .25s}
+#prox .n{font-family:'Big Shoulders Display';font-weight:900;font-size:64px;line-height:.95}
+#prox .t{font-weight:600}
+#vig{position:absolute;inset:0;z-index:450;pointer-events:none;transition:box-shadow .3s}
+#vig.out{box-shadow:inset 0 0 90px 22px rgba(139,92,246,.85);animation:vig 1.4s ease-in-out infinite}
+#vig.ping{box-shadow:inset 0 0 90px 26px rgba(255,61,110,.9);animation:vig .5s ease-in-out infinite}
+@keyframes vig{50%{opacity:.45}}
+#sheet{position:absolute;z-index:500;left:0;right:0;bottom:0;background:rgba(11,10,23,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1.5px solid var(--line);border-radius:22px 22px 0 0;padding:6px 14px max(12px,env(safe-area-inset-bottom));max-height:62%;overflow:auto}
+#sheet .grab{width:42px;height:5px;border-radius:9px;background:var(--line);margin:4px auto 8px}
+#sheetHead{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;padding:2px 0 6px}
+.badge{display:inline-flex;align-items:center;gap:8px;font-weight:800;font-family:'Big Shoulders Display';font-size:24px}
+.badge i{width:12px;height:12px;border-radius:50%;display:inline-block}
+.badge.seeker i{background:var(--seek)}.badge.hider i{background:var(--hide)}.badge.caught i{background:#6b6790}
+.edge{font-size:14px;text-align:right}
+.edge b{font-weight:700}
+.edge.bad b{color:var(--bad)}
+#sheet.collapsed #sheetBody{display:none}
+#actions .btn{margin:2px 0 8px}
+.prow{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);gap:10px}
+.prow:last-child{border:0}
+.chip{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:99px;margin-right:6px}
+.chip.seeker{background:rgba(255,106,43,.2);color:#ff9a6a}
+.chip.hider{background:rgba(62,224,255,.18);color:var(--hide)}
+.chip.caught{background:var(--ink3);color:var(--mut)}
+.me{width:20px;height:20px;border-radius:50%;background:var(--ok);border:3px solid #fff;box-shadow:0 0 0 7px rgba(93,255,176,.28)}
+.pin{width:34px;height:34px;border-radius:50%;border:3px solid #fff;color:#07202a;font-family:'Big Shoulders Display';font-weight:900;font-size:19px;display:flex;align-items:center;justify-content:center;background:var(--hide);box-shadow:0 0 0 8px rgba(62,224,255,.28)}
+.tgt{font-size:34px;filter:drop-shadow(0 0 10px #ff3d6e)}
+.leaflet-tooltip{background:var(--ink);color:var(--txt);border:1px solid var(--line);font-weight:600}
+
+/* écrans plein cadre */
+.full{display:none;position:fixed;inset:0;z-index:2000;text-align:center;overflow:auto}
+.full.on{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+#role{background:var(--ink)}
+#role.seeker{background:radial-gradient(90% 70% at 50% 40%,#5a1d05,var(--ink))}
+#role.hider{background:radial-gradient(90% 70% at 50% 40%,#073a46,var(--ink))}
+#roleTitle{font-size:clamp(70px,24vw,130px);line-height:.9}
+#role.seeker #roleTitle{color:var(--seek)}
+#role.hider #roleTitle{color:var(--hide)}
+#role.spin #roleTitle{filter:blur(2px);opacity:.8}
+#roleSub{max-width:32ch;font-size:18px;margin:16px 0 26px;color:#e3defc;min-height:6em}
+#roleKick{color:var(--mut);margin-bottom:6px}
+#end{background:rgba(11,10,23,.96)}
+#endTitle{font-size:clamp(52px,16vw,96px);line-height:.92}
+#end.hiders #endTitle{color:var(--hide)}
+#end.seekers #endTitle{color:var(--seek)}
+#endStats{display:flex;gap:12px;margin:20px 0 26px}
+#endStats div{background:var(--ink2);border:1.5px solid var(--line);border-radius:16px;padding:12px 18px}
+#endStats b{display:block;font-family:'Big Shoulders Display';font-size:34px;line-height:1}
+#rules{background:var(--ink);justify-content:flex-start;text-align:left;align-items:stretch}
+#rules .in{max-width:520px;margin:0 auto;width:100%}
+#rules h2{font-size:48px;margin:6px 0 10px}
+#rules h3{font-size:24px;color:var(--gasHi);margin:18px 0 4px}
+#rules p{margin:0;color:#d6d1f7}
+#pick{background:var(--ink);z-index:2200;justify-content:flex-start;text-align:left;align-items:stretch}
+#pick .in{max-width:520px;margin:0 auto;width:100%}
+#pick h2{font-size:38px;margin:6px 0 4px}
+.pickrow{display:flex;align-items:center;gap:12px;text-align:left;margin:0 0 10px;font-weight:700;font-size:19px}
+.pickrow small{margin-left:auto;font-weight:500;color:var(--mut);font-size:14px}
+#claim{z-index:2500;background:radial-gradient(90% 60% at 50% 35%,#5a0f2c,var(--ink))}
+#claim .ring2{width:92px;height:92px;border-radius:50%;border:4px solid var(--bad);display:flex;align-items:center;justify-content:center;font-size:44px;margin-bottom:18px;animation:ringp 1.2s ease-out infinite}
+@keyframes ringp{0%{box-shadow:0 0 0 0 rgba(255,61,110,.7)}100%{box-shadow:0 0 0 30px rgba(255,61,110,0)}}
+#claim h1{font-size:clamp(44px,13vw,80px);line-height:.95}
+#claim p{font-size:19px;max-width:28ch;margin:14px 0 26px;color:#f2dfe8}
+#claim .btn{max-width:340px;margin:0 0 10px}
+#toast{position:fixed;z-index:2600;left:14px;right:14px;top:max(14px,env(safe-area-inset-top));display:none;background:var(--ink3);border:1.5px solid var(--gasHi);border-radius:16px;padding:14px 16px;font-weight:600;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+#toast.on{display:block;animation:pop .25s}
+#toast.ok{border-color:var(--ok)}
+#toast.no{border-color:var(--bad)}
+#ring{z-index:2500;background:radial-gradient(90% 60% at 50% 35%,#2d1b69,var(--ink))}
+#ring .ring2{width:92px;height:92px;border-radius:50%;border:4px solid var(--gasHi);display:flex;align-items:center;justify-content:center;font-size:44px;margin-bottom:18px;animation:ringv 1.2s ease-out infinite}
+@keyframes ringv{0%{box-shadow:0 0 0 0 rgba(183,156,255,.7)}100%{box-shadow:0 0 0 30px rgba(183,156,255,0)}}
+#ring h1{font-size:clamp(44px,13vw,80px);line-height:.95}
+#ring p{font-size:19px;max-width:28ch;margin:14px 0 26px;color:#e3defc}
+#ring .btn{max-width:340px;margin:0 0 10px}
+#talk{display:none;position:fixed;left:0;right:0;bottom:0;z-index:2300;background:var(--ink2);border-top:1.5px solid var(--gasHi);border-radius:22px 22px 0 0;padding:14px 16px max(16px,env(safe-area-inset-bottom));box-shadow:0 -12px 40px rgba(0,0,0,.55)}
+#talk.on{display:block;animation:pop .25s}
+#talk .th{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+#talk .th b{font-family:'Big Shoulders Display';font-weight:900;font-size:28px}
+#ptt{display:block;width:100%;height:130px;border-radius:22px;border:0;background:var(--gas);color:#fff;font-weight:800;font-size:22px;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;transition:transform .08s,background .15s}
+#ptt.down{background:var(--bad);transform:scale(.98);box-shadow:0 0 0 10px rgba(255,61,110,.3)}
+#ptt:disabled{opacity:.4}
+.rowbtns{display:flex;gap:6px;flex:none}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important}.ring{stroke-dashoffset:0}.gasfill,.holefill,.dot{opacity:1}}
 </style>
 </head>
 <body>
 
-<!-- CONFIG FIREBASE MANQUANTE -->
-<div id="setup" class="screen">
-  <h1>Configuration (1 fois)</h1>
-  <p class="sub">Il manque la config Firebase pour synchroniser les joueurs.</p>
-  <ol>
-    <li>Va sur <b>console.firebase.google.com</b> → Ajouter un projet (gratuit).</li>
-    <li>Menu <b>Build → Realtime Database → Créer</b> (région Belgique ou Europe).</li>
-    <li>Onglet <b>Règles</b>, colle ceci puis Publier :
-<pre>{ "rules": { "games": { ".read": true, ".write": true } } }</pre></li>
-    <li>Roue ⚙ → Paramètres du projet → <b>Ajouter une appli Web</b> → copie l'objet <code>firebaseConfig</code>.</li>
-    <li>Colle-le dans ce fichier à la ligne <code>FIREBASE_CONFIG</code>, puis héberge le fichier (Netlify Drop / GitHub Pages) : le GPS exige du HTTPS.</li>
-  </ol>
-</div>
-
-<div id="home" class="screen">
-  <h1>🕵️ Cache-cache GPS</h1>
-  <p class="sub">4 chercheurs · 4 cachés · zone qui rétrécit · v2</p>
-  <input id="name" placeholder="Ton prénom" maxlength="14" autocomplete="off">
-  <button id="btnCreate">Créer une partie</button>
-  <div class="or">ou</div>
-  <input id="code" placeholder="CODE" maxlength="4" autocapitalize="characters" style="text-align:center;letter-spacing:6px;text-transform:uppercase">
-  <button id="btnJoin" class="sec">Rejoindre</button>
-  <p id="homeErr" class="err"></p>
-</div>
-
-<div id="lobby" class="screen">
-  <p class="sub" style="margin-bottom:0">Code de la partie</p>
-  <div class="code" id="lobCode">----</div>
-  <button class="sec" id="btnShare">Partager le code</button>
-  <div class="row">
-    <button class="red" id="btnSeeker">Chercheur <span id="nSeeker"></span></button>
-    <button class="blue" id="btnHider">Caché <span id="nHider"></span></button>
+<!-- ACCUEIL -->
+<section id="home" class="screen bg"><div class="wrap">
+  <div class="hero" aria-hidden="true">
+    <svg viewBox="0 0 400 400">
+      <circle class="gasfill" cx="200" cy="200" r="170"/>
+      <circle class="ring" style="--i:0" pathLength="1" cx="200" cy="200" r="170"/>
+      <circle class="ring" style="--i:1" pathLength="1" cx="225" cy="185" r="106"/>
+      <circle class="ring" style="--i:2" pathLength="1" cx="215" cy="160" r="64"/>
+      <circle class="ring" style="--i:3" pathLength="1" cx="222" cy="150" r="42"/>
+      <circle class="ring" style="--i:4" pathLength="1" cx="228" cy="146" r="21" stroke="#ff6a2b"/>
+      <circle class="dot s" cx="105" cy="270" r="7"/>
+      <circle class="dot s pulse" cx="105" cy="270" r="7"/>
+      <circle class="dot h" cx="230" cy="148" r="6"/>
+      <circle class="dot h pulse" cx="230" cy="148" r="6"/>
+    </svg>
   </div>
-  <div class="card" id="lobPlayers"></div>
+  <h1 class="title"><span>Dernier</span><span class="b">cercle</span></h1>
+  <p class="lead">Cache-cache en vrai, avec GPS, zone qui se ferme et sirène.</p>
+  <label class="mut" for="name" style="font-size:14px">Ton prénom</label>
+  <input id="name" class="field" placeholder="Romain" maxlength="14" autocomplete="off">
+  <button id="btnCreate" class="btn">Créer une partie</button>
+  <div class="or">ou rejoins</div>
+  <input id="code" class="field codein" placeholder="CODE" maxlength="4" autocapitalize="characters" autocomplete="off" aria-label="Code de la partie">
+  <button id="btnJoin" class="btn ghost">Rejoindre avec le code</button>
+  <p id="homeErr" class="err" role="alert"></p>
+  <button id="btnRules" class="link">Comment ça marche ?</button>
+</div></section>
+
+<!-- LOBBY -->
+<section id="lobby" class="screen bg"><div class="wrap">
+  <h2 style="font-size:40px">Salle d'attente</h2>
+  <p class="mut" style="margin:0">Donne ce code à tes amis.</p>
+  <div class="codebox" id="lobCode" aria-label="Code de la partie"></div>
+  <button class="btn ghost" id="btnShare">Partager le code</button>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px"><b id="lobCount">1 joueur</b><span class="mut" style="font-size:14px">de 2 à autant que tu veux</span></div>
+    <div class="roster" id="lobPlayers"></div>
+    <div class="split" id="lobSplit"></div>
+    <p class="mut" style="margin:12px 0 0;font-size:14px">Les équipes sont tirées au sort au lancement.</p>
+  </div>
   <div class="card" id="hostBox" style="display:none">
-    <h2 style="margin-top:0">Réglages (hôte)</h2>
-    <p class="sub" style="margin:0 0 8px">Zones : 500 → 250 → 150 → 100 → 50 m, un cran toutes les 5 min.<br>Ping : toutes les 3 min, les chercheurs voient les cachés 5 s (sirène chez les cachés).<br>Alertes de proximité à moins de 50 m.</p>
-    <label><input type="checkbox" id="testmode">Mode test (temps ×10)</label>
-    <p class="sub" style="margin:6px 0">Le centre de départ = ta position actuelle. Les cachés ont 2 min pour se cacher.</p>
-    <button id="btnStart">Lancer la partie</button>
+    <label class="switch"><input type="checkbox" id="testmode"><span>Mode test (le temps passe 10 fois plus vite)</span></label>
+    <button id="btnStart" class="btn">Lancer le tirage au sort</button>
   </div>
-  <button class="sec" id="btnSound">🔊 Tester le son (sirène)</button>
-  <p id="lobMsg" class="sub"></p>
-  <button class="sec" id="btnLeave">Quitter</button>
-</div>
+  <div id="waitBox" class="card" style="display:none;text-align:center"><div class="wait"><i></i><i></i><i></i></div><span class="mut">L'hôte lance la partie quand tout le monde est là.</span></div>
+  <p id="lobMsg" class="err"></p>
+  <button class="btn ghost" id="btnSound">Tester le son de la sirène</button>
+  <div style="display:flex;justify-content:space-between;margin-top:6px"><button class="link" id="btnRules2">Les règles</button><button class="link" id="btnLeave">Quitter</button></div>
+</div></section>
 
-<div id="game" class="screen" style="padding:0;overflow:hidden">
+<!-- JEU -->
+<section id="game" class="screen" style="overflow:hidden">
   <div id="map"></div>
+  <div id="vig"></div>
   <div id="hud">
-    <div class="chip"><small id="h1l">Zone</small><b id="h1">--</b></div>
-    <div class="chip"><small id="h2l">Ping cachés</small><b id="h2">--</b></div>
-    <div class="chip"><small id="h3l">Destruction</small><b id="h3">--</b></div>
+    <div class="bar">
+      <div class="cell"><span class="lab" id="c1l">Zone</span><span class="val" id="c1v">--</span></div>
+      <div class="cell" id="c2"><span class="lab" id="c2l">Prochain ping</span><span class="val" id="c2v">--</span></div>
+      <div class="cell"><span class="lab" id="c3l">Destruction</span><span class="val" id="c3v">--</span></div>
+    </div>
+    <div id="track"></div>
   </div>
   <div id="banner"></div>
-  <div id="prox"></div>
-  <div id="bottom">
-    <div class="head"><span id="gpsState">GPS…</span><span><span id="myRole"></span> <button class="mini sec" id="btnQuit">Quitter</button></span></div>
+  <div id="prox"><div class="n" id="proxN"></div><div class="t" id="proxT"></div></div>
+  <div id="sheet" class="collapsed">
+    <div class="grab"></div>
     <div id="actions"></div>
-    <div id="gamePlayers"></div>
+    <div id="sheetHead">
+      <span class="badge" id="myRole"></span>
+      <span class="edge" id="edgeInfo"><span class="mut" id="gpsState">GPS…</span></span>
+    </div>
+    <div id="sheetBody">
+      <div id="gamePlayers"></div>
+      <div id="log"></div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px"><span class="mut" id="gpsLine" style="font-size:14px"></span><button class="btn ghost sm" id="btnQuit">Quitter la partie</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- TIRAGE DES RÔLES -->
+<div id="role" class="full" role="dialog" aria-live="polite">
+  <div id="roleKick">Tirage au sort</div>
+  <h1 id="roleTitle">…</h1>
+  <p id="roleSub"></p>
+  <button class="btn" id="roleBtn" style="max-width:320px;display:none">Je suis prêt</button>
+</div>
+
+<!-- QUI AS-TU TROUVÉ ? -->
+<div id="pick" class="full" role="dialog">
+  <div class="in">
+    <h2>Qui as-tu trouvé ?</h2>
+    <p class="mut" style="margin:0 0 18px">Touche son nom. Il reçoit une alerte et doit confirmer.</p>
+    <div id="pickList"></div>
+    <button class="btn ghost" id="pickClose" style="margin-top:10px">Fermer</button>
   </div>
 </div>
 
-<div id="end" class="screen">
-  <div class="big" id="endTitle"></div>
-  <p class="sub" id="endSub"></p>
-  <button id="btnEndLeave" style="max-width:300px">Retour à l'accueil</button>
+<!-- CONFIRMATION D'UN CACHÉ -->
+<div id="claim" class="full" role="alertdialog" aria-live="assertive">
+  <div class="ring2" aria-hidden="true">👁</div>
+  <h1 id="claimTitle"></h1>
+  <p id="claimQ"></p>
+  <button class="btn" id="claimYes">Oui, j'ai été trouvé</button>
+  <button class="btn ghost" id="claimNo">Non, pas du tout</button>
 </div>
 
+<!-- APPEL ENTRANT -->
+<div id="ring" class="full" role="alertdialog" aria-live="assertive">
+  <div class="ring2" aria-hidden="true">🎙</div>
+  <h1 id="ringTitle"></h1>
+  <p id="ringQ"></p>
+  <button class="btn" id="ringYes">Oui, accepter</button>
+  <button class="btn ghost" id="ringNo">Non, refuser</button>
+</div>
+
+<!-- TALKIE-WALKIE -->
+<div id="talk" role="dialog" aria-label="Talkie-walkie">
+  <div class="th"><div><b id="talkName"></b><div class="mut" id="talkState" style="font-size:14px"></div></div><button class="btn danger sm" id="talkEnd">Raccrocher</button></div>
+  <button id="ptt" disabled>Maintiens pour parler</button>
+</div>
+
+<div id="toast" role="status"></div>
+
+<!-- FIN -->
+<div id="end" class="full" role="dialog">
+  <h1 id="endTitle"></h1>
+  <p id="endSub" style="font-size:18px;max-width:30ch;margin:12px 0 0"></p>
+  <div id="endStats"></div>
+  <button id="btnEndLeave" class="btn" style="max-width:320px">Rejouer</button>
+</div>
+
+<!-- RÈGLES -->
+<div id="rules" class="full" role="dialog">
+  <div class="in">
+    <h2>Les règles</h2>
+    <h3>Les équipes</h3><p>Au lancement, le tirage au sort répartit tout le monde en chercheurs et en cachés, à parts égales. De 2 joueurs à autant que vous êtes.</p>
+    <h3>La zone</h3><p>La partie démarre dans un cercle de 400 m. Toutes les 5 minutes, il se ferme et se décale : 250, 150, 100, puis 50 m. Hors du cercle, tu es dans le gaz violet : reviens vite.</p>
+    <h3>Le ping</h3><p>Toutes les 3 minutes, les chercheurs voient les cachés sur la carte pendant 5 secondes. Pendant ce temps, la sirène retentit sur les téléphones des cachés.</p>
+    <h3>Les alertes</h3><p>À moins de 50 m d'un adversaire, ton téléphone te prévient tous les 10 m, jusqu'à 0 m.</p>
+    <h3>Quand on te trouve</h3><p>Un chercheur qui t'a trouvé touche ton nom dans l'appli. Ton téléphone sonne et te demande : « Avez-vous vraiment été trouvé par lui ? ». Tu réponds Oui ou Non. Si tu réponds Oui, tu es éliminé.</p>
+    <h3>Parler aux autres</h3><p>Ouvre la liste des joueurs (barre du bas) et touche « Parler » à côté d'un nom. Il reçoit « Benjamin veut te parler » et répond Oui ou Non. S'il accepte, maintiens le gros bouton pour parler et relâche pour écouter, comme un talkie-walkie. Il t'entend avec 1 seconde de retard environ.</p>
+    <h3>La zone de destruction</h3><p>Elle apparaît quand le cercle atteint 100 m. Un caché qui la rejoint (à moins de 20 m) et appuie sur « Détruire » fait gagner les cachés.</p>
+    <h3>Fin de partie</h3><p>Les chercheurs gagnent s'ils trouvent tous les cachés, ou si le point n'est pas détruit 10 minutes après le dernier cercle.</p>
+    <h3>Avant de jouer</h3><p>Autorise la localisation précise, laisse l'écran allumé, monte le volume et désactive le mode silencieux.</p>
+    <button class="btn" id="btnRulesClose" style="margin-top:24px">Compris</button>
+  </div>
+</div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -133,16 +348,16 @@ const FIREBASE_CONFIG = {
 };
 
 // ===== RÉGLAGES DU JEU (modifiables) =====
-const MAX_PER_TEAM = 4;
+const MIN_PLAYERS  = 2;                    // pas de maximum
 const HIDE_DELAY   = 120000;               // temps pour se cacher (ms)
-const RADII        = [500,250,150,100,50]; // rayons successifs de la zone (m)
+const RADII        = [400,250,150,100,50]; // rayons successifs de la zone (m)
 const STAGE_MS     = 300000;               // un cran de zone toutes les 5 min
-const CLOSE_MS     = 60000;                // durée de fermeture de la zone à chaque cran
+const CLOSE_MS     = 60000;                // durée de fermeture à chaque cran
 const PING_MS      = 180000;               // ping des cachés toutes les 3 min
 const PING_LEN     = 5000;                 // durée du ping (5 s)
-const OVERTIME     = 600000;               // temps restant après la zone finale
+const OVERTIME     = 600000;               // temps restant après le dernier cercle
 const TARGET_RADIUS= 20;                   // rayon de la zone de destruction (m)
-const TARGET_AT_R  = 100;                  // la zone de destruction apparaît quand la zone atteint ce rayon
+const TARGET_AT_R  = 100;                  // la zone de destruction apparaît à ce rayon
 const PROX_HIDERS  = true;                 // alertes de proximité pour les cachés
 const PROX_SEEKERS = true;                 // alertes de proximité pour les chercheurs
 // =========================================
@@ -151,7 +366,13 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = ms => { ms = Math.max(0, Math.round(ms/1000)); return String(Math.floor(ms/60)).padStart(2,'0')+':'+String(ms%60).padStart(2,'0'); };
 function show(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on', s.id===id)); }
+const AVC = ['#b79cff','#3ee0ff','#ffd23f','#5dffb0','#ff9a6a','#ff7ac8'];
+const avColor = n => AVC[[...String(n)].reduce((a,c)=>a+c.charCodeAt(0),0)%AVC.length];
+const avatar = n => `<span class="av" style="background:${avColor(n)}">${esc((n||'?')[0].toUpperCase())}</span>`;
 
+if (typeof firebase === 'undefined' || typeof L === 'undefined') {
+  show('home'); $('#homeErr').textContent = 'Connexion impossible. Vérifie ton réseau puis recharge la page.';
+}
 firebase.initializeApp(FIREBASE_CONFIG);
 const db = firebase.database();
 let offset = 0;
@@ -159,9 +380,9 @@ db.ref('.info/serverTimeOffset').on('value', s => offset = s.val() || 0);
 const now = () => Date.now() + offset;
 
 let me = null, game = null, gref = null, lref = null, live = {}, lastFix = null, gpsId = null;
-let map = null, zoneC = null, nextC = null, meM = null, tgtM = null, tgtC = null;
+let map = null, zoneC = null, nextC = null, gasP = null, meM = null, tgtM = null, tgtC = null;
 const markers = {};
-let lastVibe = 0, wakeLock = null, awake = false, lastLive = 0, pingDone = -1, lastLevel = 99, proxTimer = null;
+let lastVibe = 0, wakeLock = null, awake = false, lastLive = 0, pingDone = -1, lastLevel = 99, proxTimer = null, roleTimer = null, tileErrs = 0;
 try { me = JSON.parse(localStorage.getItem('cc_me') || 'null'); } catch(e){}
 const saveMe = () => { try { me ? localStorage.setItem('cc_me', JSON.stringify(me)) : localStorage.removeItem('cc_me'); } catch(e){} };
 
@@ -174,7 +395,7 @@ function makeWav(samples, rate){
   for(let i=0;i<n;i++) v.setInt16(44+i*2, Math.max(-1,Math.min(1,samples[i]))*32767, true);
   return URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
 }
-function genSiren(sec){ // sirène d'alerte : fréquence qui monte et descend
+function genSiren(sec){
   const rate=22050, n=Math.floor(rate*sec), s=new Float32Array(n); let ph=0;
   for(let i=0;i<n;i++){
     const t=i/rate, f=650+250*Math.sin(2*Math.PI*t/2.5-Math.PI/2);
@@ -189,36 +410,50 @@ function genBeep(){
   for(let i=0;i<n;i++){ const t=i/rate; s[i]=0.8*Math.min(1,t/0.01,(0.22-t)/0.03)*Math.sin(2*Math.PI*1000*t); }
   return makeWav(s,rate);
 }
-const sirenA = new Audio(genSiren(5)), beepA = new Audio(genBeep());
-sirenA.preload = beepA.preload = 'auto';
+function genChime(){ // deux notes qui se répètent : demande de confirmation
+  const rate=22050, n=Math.floor(rate*1.3), s=new Float32Array(n);
+  [[0,.2,880],[.22,.2,1175],[.65,.2,880],[.87,.2,1175]].forEach(([st,d,f])=>{
+    for(let i=Math.floor(st*rate);i<Math.floor((st+d)*rate)&&i<n;i++){ const t=i/rate-st; s[i]+=0.85*Math.min(1,t/0.01,(d-t)/0.05)*(Math.sin(2*Math.PI*f*t)+0.3*Math.sin(4*Math.PI*f*t))/1.3; }
+  });
+  return makeWav(s,rate);
+}
+const sirenA = new Audio(genSiren(5)), beepA = new Audio(genBeep()), chimeA = new Audio(genChime());
+sirenA.preload = beepA.preload = chimeA.preload = 'auto';
 let audioReady = false;
 function unlockAudio(){
   if(audioReady) return; audioReady = true;
-  [sirenA,beepA].forEach(a=>{ try{ a.muted=true; const p=a.play(); if(p&&p.then) p.then(()=>{a.pause();a.currentTime=0;a.muted=false;}).catch(()=>{a.muted=false;audioReady=false;}); }catch(e){ a.muted=false; audioReady=false; } });
+  [sirenA,beepA,chimeA].forEach(a=>{ try{ a.muted=true; const p=a.play(); if(p&&p.then) p.then(()=>{a.pause();a.currentTime=0;a.muted=false;}).catch(()=>{a.muted=false;audioReady=false;}); }catch(e){ a.muted=false; audioReady=false; } });
   try{ speechSynthesis.speak(new SpeechSynthesisUtterance('')); }catch(e){}
 }
 document.addEventListener('pointerdown', unlockAudio, {passive:true});
 document.addEventListener('touchend', unlockAudio, {passive:true});
 function playSiren(){ try{ sirenA.currentTime=0; sirenA.play().catch(()=>{}); }catch(e){} }
+function playChime(){ try{ chimeA.currentTime=0; chimeA.play().catch(()=>{}); }catch(e){} }
 function playBeep(){ try{ beepA.currentTime=0; beepA.play().catch(()=>{}); }catch(e){} }
 function speak(t){ try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(t); u.lang='fr-FR'; u.rate=1.05; speechSynthesis.speak(u); }catch(e){} }
 $('#btnSound').onclick = () => { unlockAudio(); playSiren(); setTimeout(()=>{ try{sirenA.pause();sirenA.currentTime=0;}catch(e){} },2500); };
 
+// ---------- règles (fenêtre) ----------
+const openRules = () => $('#rules').classList.add('on');
+$('#btnRules').onclick = openRules; $('#btnRules2').onclick = openRules;
+$('#btnRulesClose').onclick = () => $('#rules').classList.remove('on');
+
 // ---------- géométrie ----------
 function dist(a,b){const R=6371000,t=Math.PI/180,dLa=(b.lat-a.lat)*t,dLo=(b.lng-a.lng)*t;const x=Math.sin(dLa/2)**2+Math.cos(a.lat*t)*Math.cos(b.lat*t)*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
 function randPoint(c,rad){const r=rad*Math.sqrt(Math.random()),a=Math.random()*2*Math.PI;return{lat:c.lat+r*Math.cos(a)/111320,lng:c.lng+r*Math.sin(a)/(111320*Math.cos(c.lat*Math.PI/180))};}
+function circlePts(c,R,n){const pts=[];for(let i=0;i<n;i++){const a=2*Math.PI*i/n;pts.push([c.lat+R*Math.cos(a)/111320,c.lng+R*Math.sin(a)/(111320*Math.cos(c.lat*Math.PI/180))]);}return pts;}
 const lerp = (a,b,f) => a+(b-a)*f;
 const getPos = () => new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(p=>res({lat:p.coords.latitude,lng:p.coords.longitude}),rej,{enableHighAccuracy:true,timeout:15000}));
 
 // ---------- GPS ----------
-function setGps(t){ $('#gpsState').textContent = t; }
+function setGps(t){ const g=$('#gpsState'); if(g) g.textContent = t; }
 function startGps(){
   if (gpsId!=null) return;
   if (!navigator.geolocation){ setGps('GPS indisponible'); return; }
   gpsId = navigator.geolocation.watchPosition(p=>{
     lastFix = {lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy};
-    setGps('GPS ±'+Math.round(p.coords.accuracy)+' m'); updateMe();
-  }, ()=>setGps('⚠ GPS refusé ou indisponible'), {enableHighAccuracy:true,maximumAge:1000,timeout:20000});
+    $('#gpsLine').textContent = 'GPS ±'+Math.round(p.coords.accuracy)+' m'; updateMe();
+  }, ()=>{ $('#gpsLine').textContent='⚠ GPS refusé ou indisponible'; setGps('GPS refusé'); }, {enableHighAccuracy:true,maximumAge:1000,timeout:20000});
 }
 async function keepAwake(){ try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden && game && game.status==='running') keepAwake(); });
@@ -226,10 +461,13 @@ document.addEventListener('visibilitychange',()=>{ if(!document.hidden && game &
 // ---------- accueil ----------
 function genCode(){ const c='ABCDEFGHJKMNPQRSTUVWXYZ'; return Array.from({length:4},()=>c[Math.floor(Math.random()*c.length)]).join(''); }
 const rid = () => Math.random().toString(36).slice(2,10);
+try{ const n=localStorage.getItem('cc_name'); if(n) $('#name').value=n; }catch(e){}
+const saveName = n => { try{ localStorage.setItem('cc_name',n); }catch(e){} };
 
 $('#btnCreate').onclick = async () => {
   unlockAudio();
-  const name = $('#name').value.trim(); if(!name) return $('#homeErr').textContent='Entre ton prénom.';
+  const name = $('#name').value.trim(); if(!name) return $('#homeErr').textContent='Entre ton prénom pour continuer.';
+  saveName(name);
   const code = genCode(), pid = rid();
   await db.ref('games/'+code).set({status:'lobby',hostId:pid,createdAt:firebase.database.ServerValue.TIMESTAMP,players:{[pid]:{name,team:'',caught:false}}});
   me = {pid,name,code}; saveMe(); attach();
@@ -237,12 +475,12 @@ $('#btnCreate').onclick = async () => {
 $('#btnJoin').onclick = async () => {
   unlockAudio();
   const name = $('#name').value.trim(), code = $('#code').value.trim().toUpperCase();
-  if(!name) return $('#homeErr').textContent='Entre ton prénom.';
-  if(code.length!==4) return $('#homeErr').textContent='Code à 4 lettres.';
+  if(!name) return $('#homeErr').textContent='Entre ton prénom pour continuer.';
+  if(code.length!==4) return $('#homeErr').textContent='Le code a 4 lettres.';
+  saveName(name);
   const snap = await db.ref('games/'+code).once('value'), g = snap.val();
-  if(!g) return $('#homeErr').textContent='Partie introuvable.';
-  if(g.status!=='lobby') return $('#homeErr').textContent='Partie déjà lancée.';
-  if(Object.keys(g.players||{}).length>=MAX_PER_TEAM*2) return $('#homeErr').textContent='Partie pleine (8 joueurs).';
+  if(!g) return $('#homeErr').textContent='Aucune partie avec ce code. Vérifie les lettres.';
+  if(g.status!=='lobby') return $('#homeErr').textContent='Cette partie a déjà commencé.';
   const pid = rid();
   await db.ref(`games/${code}/players/${pid}`).set({name,team:'',caught:false});
   me = {pid,name,code}; saveMe(); attach();
@@ -251,122 +489,375 @@ function attach(){
   if(gref) gref.off(); if(lref) lref.off();
   gref = db.ref('games/'+me.code);
   lref = db.ref('games/'+me.code+'_live');
-  startGps();
+  startGps(); watchFrom = now()-1500;
+  vref = db.ref('games/'+me.code+'_voice'); vref.child('calls').on('value', s => handleCalls(s.val()));
   lref.on('value', s => { live = s.val() || {}; });
   gref.on('value', s => { game = s.val(); if(!game){ leave(true); return; } render(); });
 }
 function leave(silent){
   if(gref){ gref.off(); gref=null; } if(lref){ lref.off(); lref=null; }
+  if(vref){ try{ closeCall(); }catch(e){} vref.child('calls').off(); vref=null; }
   if(me && game && game.status==='lobby' && !silent) db.ref(`games/${me.code}/players/${me.pid}`).remove();
   me=null; game=null; saveMe(); show('home');
 }
 $('#btnLeave').onclick = () => leave(false);
 $('#btnQuit').onclick = () => { leave(true); location.reload(); };
 $('#btnEndLeave').onclick = () => { $('#end').classList.remove('on'); leave(true); location.reload(); };
+$('#sheetHead').onclick = () => $('#sheet').classList.toggle('collapsed');
 
 // ---------- lobby ----------
-const players = () => Object.entries((game&&game.players)||{}).map(([id,p])=>({id,...p}));
-const count = t => players().filter(p=>p.team===t).length;
-function setTeam(t){ if(count(t)>=MAX_PER_TEAM && (game.players[me.pid].team!==t)) return; db.ref(`games/${me.code}/players/${me.pid}/team`).set(t); }
-$('#btnSeeker').onclick = () => setTeam('seeker');
-$('#btnHider').onclick = () => setTeam('hider');
+const players = () => Object.entries((game&&game.players)||{}).map(([id,p])=>({id,...p, team:p.team||''}));
 $('#btnShare').onclick = async () => {
-  const txt = 'Cache-cache GPS : code '+me.code+' — '+location.href;
-  try{ if(navigator.share) await navigator.share({text:txt}); else { await navigator.clipboard.writeText(txt); $('#lobMsg').textContent='Copié !'; } }catch(e){}
+  const txt = 'Dernier cercle : rejoins ma partie avec le code '+me.code+' sur '+location.href;
+  try{ if(navigator.share) await navigator.share({text:txt}); else { await navigator.clipboard.writeText(txt); $('#lobMsg').style.color='var(--ok)'; $('#lobMsg').textContent='Lien copié.'; } }catch(e){}
 };
 function renderLobby(){
-  $('#lobCode').textContent = me.code;
-  $('#nSeeker').textContent = count('seeker')+'/'+MAX_PER_TEAM;
-  $('#nHider').textContent = count('hider')+'/'+MAX_PER_TEAM;
-  $('#lobPlayers').innerHTML = players().map(p=>`<div class="pl"><span>${esc(p.name)}${p.id===game.hostId?' 👑':''}</span><span class="tag ${p.team||'none'}">${p.team==='seeker'?'Chercheur':p.team==='hider'?'Caché':'—'}</span></div>`).join('');
+  $('#lobCode').innerHTML = [...me.code].map(c=>`<b>${esc(c)}</b>`).join('');
+  const ps = players(), N = ps.length, S = Math.floor(N/2), H = N-S;
+  $('#lobCount').textContent = N+' joueur'+(N>1?'s':'');
+  $('#lobPlayers').innerHTML = ps.map(p=>`<div class="who">${avatar(p.name)}<span class="n">${esc(p.name)}${p.id===me.pid?' (toi)':''}</span>${p.id===game.hostId?'<span class="crown">hôte</span>':''}</div>`).join('');
+  $('#lobSplit').innerHTML = N>=MIN_PLAYERS ? `<div class="s"><b>${S}</b>chercheur${S>1?'s':''}</div><div class="h"><b>${H}</b>caché${H>1?'s':''}</div>` : '';
   const host = me.pid===game.hostId;
   $('#hostBox').style.display = host?'block':'none';
-  const ok = count('seeker')>=1 && count('hider')>=1 && players().every(p=>p.team);
-  $('#btnStart').disabled = !ok;
-  $('#lobMsg').textContent = host ? (ok?'':'Il faut au moins 1 chercheur et 1 caché, et que chacun ait choisi son équipe.') : "En attente du lancement par l'hôte…";
+  $('#waitBox').style.display = host?'none':'block';
+  $('#btnStart').disabled = N<MIN_PLAYERS;
+  $('#lobMsg').style.color=''; $('#lobMsg').textContent = host && N<MIN_PLAYERS ? 'Il faut au moins 2 joueurs pour lancer.' : '';
 }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 $('#btnStart').onclick = async () => {
-  $('#btnStart').disabled = true;
+  unlockAudio(); $('#btnStart').disabled = true;
   try{
     const fix = lastFix || await getPos();
     const speed = $('#testmode').checked?10:1;
     const centers = [{lat:fix.lat,lng:fix.lng}];
-    for(let k=1;k<RADII.length;k++) centers.push(randPoint(centers[k-1], RADII[k-1]-RADII[k])); // chaque zone reste dans la précédente
+    for(let k=1;k<RADII.length;k++) centers.push(randPoint(centers[k-1], RADII[k-1]-RADII[k]));
     const last = RADII.length-1;
     const target = randPoint(centers[last], RADII[last]-TARGET_RADIUS-5);
-    await gref.update({status:'running',speed,radii:RADII,centers,stageEvery:STAGE_MS,closeTime:CLOSE_MS,pingEvery:PING_MS,pingLen:PING_LEN,
-      targetAt:Math.max(0,RADII.indexOf(TARGET_AT_R))*STAGE_MS, endAt:last*STAGE_MS+OVERTIME, target, startAt: now()+HIDE_DELAY});
-  }catch(e){ $('#lobMsg').textContent='Position introuvable : autorise le GPS.'; $('#btnStart').disabled=false; }
+    const ids = shuffle(players().map(p=>p.id)), nS = Math.floor(ids.length/2);
+    const upd = {status:'running',speed,radii:RADII,centers,stageEvery:STAGE_MS,closeTime:CLOSE_MS,pingEvery:PING_MS,pingLen:PING_LEN,
+      targetAt:Math.max(0,RADII.indexOf(TARGET_AT_R))*STAGE_MS, endAt:last*STAGE_MS+OVERTIME, target, startAt: now()+HIDE_DELAY};
+    ids.forEach((id,i)=>{ upd['players/'+id+'/team']= i<nS?'seeker':'hider'; upd['players/'+id+'/caught']=false; });
+    await gref.update(upd);
+  }catch(e){ $('#lobMsg').textContent='Position introuvable. Autorise la localisation puis réessaie.'; $('#btnStart').disabled=false; }
 };
+
+// ---------- tirage des rôles ----------
+const ROLE_TXT = {
+  seeker:['Chercheur','Les cachés ont '+(HIDE_DELAY/60000)+' minutes pour se cacher. Ensuite, retrouve-les avant qu’ils détruisent le point.'],
+  hider:['Caché','Tu as '+(HIDE_DELAY/60000)+' minutes pour te cacher dans la zone. Survis aux chercheurs, puis détruis le point pour gagner.']
+};
+function paintRole(t, final){
+  const r=$('#role'); r.classList.remove('seeker','hider','spin'); r.classList.add(t); if(!final) r.classList.add('spin');
+  $('#roleTitle').textContent = ROLE_TXT[t][0];
+  $('#roleSub').textContent = final ? ROLE_TXT[t][1] : '';
+  $('#roleBtn').style.display = final ? 'block' : 'none';
+  $('#roleKick').textContent = final ? 'Ton rôle' : 'Tirage au sort';
+}
+function maybeRole(){
+  const mine = game.players[me.pid]; if(!mine||!mine.team) return;
+  const key = 'cc_role_'+me.code;
+  let seen=false; try{ seen = !!localStorage.getItem(key); }catch(e){}
+  if(seen || $('#role').classList.contains('on')) return;
+  $('#role').classList.add('on'); let i=0;
+  paintRole('hider',false);
+  roleTimer=setInterval(()=>paintRole(i++%2?'hider':'seeker',false),110);
+  setTimeout(()=>{ clearInterval(roleTimer); paintRole(mine.team,true); },2300);
+  $('#roleBtn').onclick = () => { try{localStorage.setItem(key,'1');}catch(e){} $('#role').classList.remove('on'); };
+}
 
 // ---------- jeu ----------
 const elapsed = () => { const r = now()-game.startAt; return r>=0 ? r*game.speed : r; };
 function zoneAt(el){
-  const T=game.stageEvery, Rr=game.radii, C=game.centers, L=Rr.length-1;
-  const n=Math.min(Math.floor(Math.max(el,0)/T),L);
+  const T=game.stageEvery, Rr=game.radii, C=game.centers, L2=Rr.length-1;
+  const n=Math.min(Math.floor(Math.max(el,0)/T),L2);
   let c=C[n], R=Rr[n], closing=false;
   if(n>=1 && el-n*T<game.closeTime){
     const f=(el-n*T)/game.closeTime; closing=true;
     c={lat:lerp(C[n-1].lat,C[n].lat,f),lng:lerp(C[n-1].lng,C[n].lng,f)}; R=lerp(Rr[n-1],Rr[n],f);
   }
-  return { c, R, closing, n, L, next: n<L?{c:C[n+1],R:Rr[n+1]}:null, nextIn: n<L?(n+1)*T-el:null };
+  return { c, R, closing, n, L:L2, next: n<L2?{c:C[n+1],R:Rr[n+1]}:null, nextIn: n<L2?(n+1)*T-el:null };
 }
 function ensureMap(){
   if(map) return;
-  const c = [game.centers[0].lat, game.centers[0].lng];
+  const c0 = game.centers[0], c = [c0.lat, c0.lng];
   map = L.map('map',{zoomControl:false}).setView(c,16);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
-  zoneC = L.circle(c,{radius:game.radii[0],color:'#22d3a0',weight:3,fillOpacity:.06}).addTo(map);
-  nextC = L.circle(c,{radius:game.radii[1]||game.radii[0],color:'#f59e0b',weight:2,dashArray:'6 8',fill:false}).addTo(map);
-  map.fitBounds(zoneC.getBounds(),{paddingBottomRight:[0,160]});
+  const dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:19,attribution:'© OpenStreetMap © CARTO'}).addTo(map);
+  dark.on('tileerror',()=>{ if(++tileErrs===6){ map.removeLayer(dark); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map); } });
+  const outer=[[c0.lat-0.6,c0.lng-0.9],[c0.lat-0.6,c0.lng+0.9],[c0.lat+0.6,c0.lng+0.9],[c0.lat+0.6,c0.lng-0.9]];
+  gasP = L.polygon([outer, circlePts(c0,game.radii[0],72)],{stroke:false,fillColor:'#7c3aed',fillOpacity:.42,interactive:false}).addTo(map);
+  zoneC = L.circle(c,{radius:game.radii[0],color:'#b79cff',weight:3,fill:false,interactive:false}).addTo(map);
+  nextC = L.circle(c,{radius:game.radii[1]||game.radii[0],color:'#ffffff',weight:2,dashArray:'6 8',fill:false,opacity:.8,interactive:false}).addTo(map);
+  map.fitBounds(zoneC.getBounds(),{paddingBottomRight:[0,170],paddingTopLeft:[0,80]});
   setTimeout(()=>map.invalidateSize(),200);
+  $('#track').innerHTML = game.radii.map((r,i)=>`<div data-i="${i}">${r} m</div>`).join('');
 }
 function updateMe(){
   if(!map||!lastFix) return;
   const ll=[lastFix.lat,lastFix.lng];
-  if(!meM) meM = L.marker(ll,{icon:L.divIcon({className:'',html:'<div class="me"></div>',iconSize:[18,18]}),zIndexOffset:1000}).addTo(map);
+  if(!meM) meM = L.marker(ll,{icon:L.divIcon({className:'',html:'<div class="me"></div>',iconSize:[20,20]}),zIndexOffset:1000}).addTo(map);
   else meM.setLatLng(ll);
 }
 function render(){
   if(!me||!game){ show('home'); return; }
   if(!game.players || !game.players[me.pid]){ leave(true); return; }
-  if(game.status!=='lobby' && !game.centers){ leave(true); $('#homeErr').textContent='Partie créée avec une ancienne version. Recharge la page puis crée une nouvelle partie.'; return; }
+  if(game.status!=='lobby' && !game.centers){ leave(true); $('#homeErr').textContent='Cette partie vient d’une ancienne version. Recharge la page puis crée une nouvelle partie.'; return; }
   if(game.status==='lobby'){ show('lobby'); renderLobby(); return; }
-  show('game'); ensureMap(); if(!awake){ awake=true; keepAwake(); } updateMe(); renderPlayers();
+  show('game'); ensureMap(); if(!awake){ awake=true; keepAwake(); } updateMe(); renderPlayers(); maybeRole(); handleClaims(); handleEvents();
   if(game.status==='ended') showEnd();
 }
 function renderPlayers(){
   const mine = game.players[me.pid];
-  $('#myRole').textContent = mine.team==='seeker'?'🔴 Chercheur':(mine.caught?'⚪ Trouvé':'🔵 Caché');
+  const roleName = mine.team==='seeker'?'Chercheur':'Caché';
+  const rb=$('#myRole'); rb.className='badge '+(mine.caught?'caught':mine.team);
+  rb.innerHTML='<i></i>'+(mine.caught?'Trouvé':roleName);
   $('#gamePlayers').innerHTML = players().sort((a,b)=>a.team.localeCompare(b.team)).map(p=>{
     const canCatch = p.team==='hider' && !p.caught && mine.team==='seeker' && game.status==='running';
-    return `<div class="pl"><span><span class="tag ${p.caught?'none':p.team}">${p.team==='seeker'?'C':'H'}</span> ${esc(p.name)}${p.id===me.pid?' (moi)':''}${p.caught?' — trouvé':''}</span>${canCatch?`<button class="mini red" data-catch="${p.id}">Trouvé</button>`:''}</div>`;
+    const chip = p.caught?'<span class="chip caught">Trouvé</span>':`<span class="chip ${p.team}">${p.team==='seeker'?'Chercheur':'Caché'}</span>`;
+    return `<div class="prow"><span>${chip}${esc(p.name)}${p.id===me.pid?' (toi)':''}</span><span class="rowbtns">${p.id!==me.pid?`<button class="btn ghost sm" data-talk="${p.id}">🎙 Parler</button>`:''}${canCatch?`<button class="btn danger sm" data-catch="${p.id}">Trouvé</button>`:''}</span></div>`;
   }).join('');
   let act='';
-  if(mine.team==='hider' && !mine.caught && game.status==='running') act+=`<button class="sec" id="btnCaught">Je me suis fait trouver</button>`;
-  if(game.status==='running' && mine.team==='hider' && !mine.caught && lastFix && elapsed()>=game.targetAt && dist(lastFix,game.target)<=TARGET_RADIUS) act+=`<button class="red" id="btnDestroy">💥 Détruire le point</button>`;
+  if(mine.team==='hider' && !mine.caught && game.status==='running') act+=`<button class="btn ghost" id="btnCaught">On m'a trouvé</button>`;
+  if(mine.team==='seeker' && !mine.caught && game.status==='running') act+=`<button class="btn" id="btnFound">J'ai trouvé quelqu'un</button>`;
+  if(game.status==='running' && mine.team==='hider' && !mine.caught && lastFix && elapsed()>=game.targetAt && dist(lastFix,game.target)<=TARGET_RADIUS) act=`<button class="btn danger" id="btnDestroy">💥 Détruire le point</button>`+act;
   if($('#actions').dataset.sig!==act){ $('#actions').innerHTML=act; $('#actions').dataset.sig=act; }
 }
 document.addEventListener('click',e=>{
-  const c=e.target.closest('[data-catch]'); if(c) db.ref(`games/${me.code}/players/${c.dataset.catch}/caught`).set(true);
+  const c=e.target.closest('[data-catch]'); if(c) sendClaim(c.dataset.catch);
+  const tk=e.target.closest('[data-talk]'); if(tk) startCall(tk.dataset.talk);
+  if(e.target.id==='btnFound'){ renderPick(); $('#pick').classList.add('on'); }
   if(e.target.id==='btnCaught') db.ref(`games/${me.code}/players/${me.pid}/caught`).set(true);
-  if(e.target.id==='btnDestroy') endGame('hiders','Point de destruction détruit par '+me.name+' !');
+  if(e.target.id==='btnDestroy') endGame('hiders','Le point de destruction a été détruit par '+me.name+'.');
 });
-function endGame(winner,reason){ if(game&&game.status==='running') gref.update({status:'ended',winner,reason}); }
+// ----- « Tu as trouvé quelqu'un » : demande de confirmation au caché -----
+let claimKey=null, claimSound=0; const handled={}; let toastTimer=null;
+function toast(msg,cls){ const t=$('#toast'); t.textContent=msg; t.className='on '+(cls||''); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.className='',4500); }
+const claimPending = c => c && c.status==='pending' && now()-c.t<30000;
+async function sendClaim(hid){
+  if(!game||game.status!=='running') return;
+  const p=game.players[hid]; if(!p||p.caught||p.team!=='hider') return;
+  if(claimPending((game.claims||{})[hid])){ toast('Une demande est déjà en attente pour '+p.name+'.'); return; }
+  await gref.child('claims/'+hid).set({by:me.pid,byName:me.name,status:'pending',t:now()});
+  $('#pick').classList.remove('on');
+  toast('Demande envoyée à '+p.name+'. En attente de sa réponse.');
+}
+function renderPick(){
+  const claims=game.claims||{}, hs=players().filter(p=>p.team==='hider'&&!p.caught);
+  $('#pickList').innerHTML = hs.length ? hs.map(p=>{
+    const wait=claimPending(claims[p.id]);
+    return `<button class="btn ghost pickrow" data-catch="${p.id}" ${wait?'disabled':''}>${avatar(p.name)}<span>${esc(p.name)}</span><small>${wait?'En attente…':'Trouvé'}</small></button>`;
+  }).join('') : '<p class="mut">Plus personne à trouver.</p>';
+}
+$('#pickClose').onclick = () => $('#pick').classList.remove('on');
+function answerClaim(yes){
+  const c=(game.claims||{})[me.pid]; if(!c) return;
+  const upd={}; upd['claims/'+me.pid]={...c,status:yes?'confirmed':'denied'};
+  if(yes) upd['players/'+me.pid+'/caught']=true;
+  upd['events/e'+Date.now()+rid()]={t:now(),kind:yes?'found':'denied',hider:me.name,seeker:c.byName};
+  gref.update(upd); $('#claim').classList.remove('on');
+}
+$('#claimYes').onclick = () => answerClaim(true);
+$('#claimNo').onclick = () => answerClaim(false);
+function handleClaims(){
+  if(!game||!me||game.status!=='running'){ $('#claim').classList.remove('on'); return; }
+  const mine=game.players[me.pid], claims=game.claims||{}, c=claims[me.pid];
+  if(c && c.status==='pending' && mine.team==='hider' && !mine.caught){
+    $('#claimTitle').textContent = c.byName+' dit t’avoir trouvé';
+    $('#claimQ').textContent = 'Avez-vous vraiment été trouvé par '+c.byName+' ?';
+    if(claimKey!==c.t){ claimKey=c.t; claimSound=0; setTimeout(()=>speak(c.byName+' dit t’avoir trouvé. Confirme sur ton écran.'),1400); try{navigator.vibrate&&navigator.vibrate([300,150,300,150,300]);}catch(e){} }
+    if(Date.now()-claimSound>4000){ claimSound=Date.now(); playChime(); }
+    $('#claim').classList.add('on');
+  } else $('#claim').classList.remove('on');
+  Object.entries(claims).forEach(([hid,cl])=>{
+    if(cl.by===me.pid && cl.status!=='pending'){
+      const k=hid+':'+cl.t; if(handled[k]) return; handled[k]=1;
+      gref.child('claims/'+hid).remove();
+    }
+  });
+  if($('#pick').classList.contains('on')) renderPick();
+}
+// ===== Talkie-walkie : appel + bouton « maintenir pour parler » =====
+const VR = 8000;                       // voix en 8 kHz, compressée (µ-law) : léger et clair
+let ac=null, mic=null, procNode=null, srcNode=null, talking=false, rawBlocks=[], sendTimer=null, seq=0, playHead=0;
+let vref=null, chOn=null, myCall=null, lastCalls={}, lastHeard=0, ringKey=null, ringSound=0, voiceBusy=false;
+function ensureAC(){
+  if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+  if(ac && ac.state!=='running') ac.resume().catch(()=>{});
+  return ac;
+}
+const setAudioSession = t => { try{ if(navigator.audioSession) navigator.audioSession.type=t; }catch(e){} };
+function mulaw(x){ const a=Math.min(1,Math.abs(x)), y=Math.log1p(255*a)/Math.log1p(255); return Math.round(((x<0?-y:y)+1)/2*255); }
+function unmulaw(b){ const y=b/255*2-1, a=Math.abs(y), x=(Math.pow(256,a)-1)/255; return y<0?-x:x; }
+function encodeBlock(raw, sr){
+  const r=sr/VR, n=Math.floor(raw.length/r), out=new Uint8Array(n);
+  for(let i=0;i<n;i++){ const a=Math.floor(i*r), b=Math.max(a+1,Math.floor((i+1)*r)); let sum=0; for(let j=a;j<b&&j<raw.length;j++) sum+=raw[j]; out[i]=mulaw(sum/(b-a)); }
+  return out;
+}
+const b64 = u8 => { let s=''; for(let i=0;i<u8.length;i+=8192) s+=String.fromCharCode.apply(null,u8.subarray(i,i+8192)); return btoa(s); };
+const unb64 = s => { const t=atob(s), u=new Uint8Array(t.length); for(let i=0;i<t.length;i++) u[i]=t.charCodeAt(i); return u; };
+function takeRaw(){ let n=0; rawBlocks.forEach(b=>n+=b.length); const o=new Float32Array(n); let p=0; rawBlocks.forEach(b=>{o.set(b,p);p+=b.length;}); rawBlocks=[]; return o; }
+
+async function getMic(){
+  if(mic) return true;
+  try{
+    ensureAC(); setAudioSession('play-and-record');
+    mic = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    mic.getAudioTracks().forEach(t=>t.enabled=false);      // micro coupé tant qu'on ne parle pas
+    srcNode = ac.createMediaStreamSource(mic);
+    procNode = ac.createScriptProcessor(4096,1,1);
+    procNode.onaudioprocess = e => { if(talking) rawBlocks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+    const mute = ac.createGain(); mute.gain.value = 0;
+    srcNode.connect(procNode); procNode.connect(mute); mute.connect(ac.destination);
+    return true;
+  }catch(e){ mic=null; toast('Micro refusé. Autorise le micro pour ce site dans les réglages du navigateur.','no'); return false; }
+}
+function stopMic(){
+  try{ procNode&&procNode.disconnect(); srcNode&&srcNode.disconnect(); mic&&mic.getTracks().forEach(t=>t.stop()); }catch(e){}
+  mic=null; procNode=null; srcNode=null; setAudioSession('auto');
+}
+function flushVoice(last){
+  if(!myCall||!vref) return;
+  const raw=takeRaw(); if(!raw.length && !last) return;
+  const d = raw.length ? b64(encodeBlock(raw, ac.sampleRate)) : '';
+  const ref = vref.child('ch/'+myCall.id+'/c'+Date.now()+rid());
+  ref.set({f:me.pid,s:seq++,d,k:last?1:0,t:now()});
+  setTimeout(()=>ref.remove(),20000);
+}
+function startTalk(){
+  if(!myCall||myCall.status!=='accepted'||talking||!mic) return;
+  ensureAC(); talking=true; rawBlocks=[]; mic.getAudioTracks().forEach(t=>t.enabled=true);
+  $('#ptt').classList.add('down'); sendTimer=setInterval(()=>flushVoice(false),700);
+  try{navigator.vibrate&&navigator.vibrate(30);}catch(e){}
+  updateTalkUI();
+}
+function stopTalk(){
+  if(!talking) return;
+  setTimeout(()=>{                                         // petite marge pour ne pas couper la fin de phrase
+    if(!talking) return; talking=false; clearInterval(sendTimer); flushVoice(true);
+    if(mic) mic.getAudioTracks().forEach(t=>t.enabled=false);
+    $('#ptt').classList.remove('down'); updateTalkUI();
+  },180);
+}
+function playChunk(c){
+  if(!ensureAC()) return;
+  if(c.d){
+    const u=unb64(c.d), f=new Float32Array(u.length); for(let i=0;i<u.length;i++) f[i]=unmulaw(u[i]);
+    const buf=ac.createBuffer(1,f.length,VR); buf.copyToChannel(f,0);
+    const src=ac.createBufferSource(); src.buffer=buf; const g=ac.createGain(); g.gain.value=1.5; src.connect(g); g.connect(ac.destination);
+    const t=ac.currentTime; if(playHead<t+0.05) playHead=t+0.2;   // petit tampon pour éviter les coupures
+    src.start(playHead); playHead+=buf.duration;
+  }
+  lastHeard=Date.now();
+  if(c.k) setTimeout(playBeep, Math.max(0,(playHead-ac.currentTime)*1000)+80);   // bip de fin : « à toi »
+}
+function listenChunks(id){
+  unlistenChunks(); chOn=vref.child('ch/'+id);
+  chOn.on('child_added', s=>{ const c=s.val(); if(c && c.f!==me.pid && now()-c.t<15000) playChunk(c); });
+}
+function unlistenChunks(){ if(chOn){ chOn.off(); chOn=null; } }
+
+const callIdOf = (a,b) => [a,b].sort().join('_');
+async function startCall(otherId){
+  if(!game||!me||!vref) return;
+  if(myCall){ toast('Tu es déjà en appel.'); return; }
+  const o=game.players[otherId]; if(!o) return;
+  unlockAudio(); ensureAC();
+  if(!(await getMic())) return;                            // le micro se demande ici, au toucher
+  await vref.child('calls/'+callIdOf(me.pid,otherId)).set({a:me.pid,b:otherId,an:me.name,bn:o.name,status:'ringing',t:now()});
+  toast('Appel envoyé à '+o.name+'. En attente de sa réponse.');
+}
+function setCallStatus(id,status){ return vref.child('calls/'+id+'/status').set(status); }
+function closeCall(){
+  if(talking){ talking=false; clearInterval(sendTimer); }
+  unlistenChunks(); stopMic(); myCall=null; playHead=0; $('#ptt').classList.remove('down'); updateTalkUI();
+}
+function hangup(){ if(myCall) setCallStatus(myCall.id,'ended'); }
+function handleCalls(calls){
+  lastCalls = calls||{}; if(!me) return;
+  let incoming=null, mine=null;
+  Object.entries(lastCalls).forEach(([id,c])=>{
+    if(c.a!==me.pid && c.b!==me.pid) return;
+    const fresh = now()-c.t<30000, iAmCaller = c.a===me.pid, other = iAmCaller?c.b:c.a, otherName = iAmCaller?c.bn:c.an;
+    if(c.status==='ringing'){
+      if(!fresh){ if(iAmCaller) vref.child('calls/'+id).remove(); return; }
+      if(iAmCaller) mine={id,other,otherName,status:'ringing'};
+      else if(myCall && myCall.id!==id) setCallStatus(id,'declined');          // déjà en appel
+      else incoming={id,c};
+    }else if(c.status==='accepted'){ mine={id,other,otherName,status:'accepted'}; }
+    else if(c.status==='declined'){
+      if(iAmCaller){ if(myCall&&myCall.id===id) closeCall(); toast(otherName+' ne veut pas parler pour l’instant.','no'); vref.child('calls/'+id).remove(); }
+    }else if(c.status==='ended'){
+      if(myCall&&myCall.id===id){ closeCall(); toast('Appel terminé.'); }
+      if(iAmCaller) setTimeout(()=>vref.child('calls/'+id).remove(),2500);
+    }
+  });
+  // appel entrant : seule la personne concernée voit la demande
+  if(incoming){
+    const c=incoming.c;
+    $('#ringTitle').textContent = c.an+' veut te parler';
+    $('#ringQ').textContent = 'Acceptes-tu un appel radio avec '+c.an+' ?';
+    if(ringKey!==incoming.id+c.t){ ringKey=incoming.id+c.t; ringSound=0; setTimeout(()=>speak(c.an+' veut te parler. Acceptes-tu ?'),1400); try{navigator.vibrate&&navigator.vibrate([300,150,300]);}catch(e){} }
+    if(Date.now()-ringSound>4000){ ringSound=Date.now(); playChime(); }
+    $('#ring').classList.add('on'); $('#ring').dataset.id=incoming.id;
+  } else $('#ring').classList.remove('on');
+  // état de mon appel
+  if(mine){
+    const wasAccepted = myCall && myCall.status==='accepted' && myCall.id===mine.id;
+    myCall = mine;
+    if(mine.status==='accepted' && !wasAccepted){ listenChunks(mine.id); playHead=0; getMic(); toast('Appel connecté avec '+mine.otherName+'.','ok'); }
+  } else if(myCall){ closeCall(); }
+  updateTalkUI();
+}
+$('#ringYes').onclick = async () => {
+  const id=$('#ring').dataset.id; if(!id) return; unlockAudio(); ensureAC();
+  if(await getMic()) setCallStatus(id,'accepted'); else setCallStatus(id,'declined');
+  $('#ring').classList.remove('on');
+};
+$('#ringNo').onclick = () => { const id=$('#ring').dataset.id; if(id) setCallStatus(id,'declined'); $('#ring').classList.remove('on'); };
+$('#talkEnd').onclick = () => { if(myCall && myCall.status==='ringing') vref.child('calls/'+myCall.id).remove(); else hangup(); };
+const ptt=$('#ptt');
+ptt.addEventListener('pointerdown',e=>{ e.preventDefault(); try{ptt.setPointerCapture(e.pointerId);}catch(_){} startTalk(); });
+['pointerup','pointercancel','lostpointercapture'].forEach(ev=>ptt.addEventListener(ev,stopTalk));
+ptt.addEventListener('contextmenu',e=>e.preventDefault());
+function updateTalkUI(){
+  const t=$('#talk'); if(!myCall){ t.classList.remove('on'); return; }
+  t.classList.add('on'); $('#talkName').textContent = myCall.otherName;
+  const acc = myCall.status==='accepted';
+  ptt.disabled = !acc;
+  ptt.textContent = talking ? 'Tu parles…' : 'Maintiens pour parler';
+  $('#talkEnd').textContent = acc ? 'Raccrocher' : 'Annuler';
+  $('#talkState').textContent = !acc ? 'Appel en cours…' : talking ? 'Relâche pour écouter' : (Date.now()-lastHeard<1500 ? myCall.otherName+' parle…' : 'En ligne');
+}
+setInterval(()=>{ if(me){ handleCalls(lastCalls); } updateTalkUI(); },700);
+
+const evText = e => e.kind==='found' ? e.hider+' a été trouvé par '+e.seeker : e.hider+' dit non : '+e.seeker+' ne l\u2019a pas trouvé';
+const seenEv = {}; let watchFrom = 0;
+function handleEvents(){
+  const evs = Object.entries((game&&game.events)||{}).map(([k,e])=>({k,...e})).sort((a,b)=>a.t-b.t);
+  evs.forEach(e=>{
+    if(seenEv[e.k]) return; seenEv[e.k]=1;
+    if(e.t<watchFrom) return;                       // ancien événement : seulement dans le journal
+    toast((e.kind==='found'?'✔ ':'✖ ')+evText(e)+'.', e.kind==='found'?'ok':'no'); playBeep();
+  });
+  $('#log').innerHTML = evs.length ? '<div class="mut" style="font-size:13px;margin:10px 0 2px">Journal de la partie</div>'+evs.slice(-6).reverse().map(e=>`<div class="prow" style="padding:6px 0;font-size:14px"><span>${e.kind==='found'?'✔':'✖'} ${esc(evText(e))}</span><span class="mut">${fmt(Math.max(0,(e.t-game.startAt))*game.speed)}</span></div>`).join('') : '';
+}
+function endGame(winner,reason){ if(game&&game.status==='running') gref.update({status:'ended',winner,reason,endEl:Math.round(Math.max(0,elapsed()))}); }
 function showEnd(){
   const mineTeam=game.players[me.pid].team, won=(game.winner==='hiders')===(mineTeam==='hider');
-  $('#endTitle').textContent = game.winner==='hiders'?'🔵 Les cachés gagnent !':'🔴 Les chercheurs gagnent !';
-  $('#endSub').textContent = (won?'Victoire — ':'Défaite — ')+(game.reason||'');
-  $('#end').classList.add('on');
+  const e=$('#end'); e.classList.remove('hiders','seekers'); e.classList.add(game.winner);
+  $('#endTitle').textContent = game.winner==='hiders'?'Les cachés gagnent':'Les chercheurs gagnent';
+  $('#endSub').textContent = (won?'Victoire. ':'Défaite. ')+(game.reason||'');
+  const hs=players().filter(p=>p.team==='hider');
+  $('#endStats').innerHTML = `<div><b>${fmt((game.endEl||0)/game.speed)}</b>de partie</div><div><b>${hs.filter(p=>p.caught).length}/${hs.length}</b>cachés trouvés</div>`;
+  $('#role').classList.remove('on'); $('#claim').classList.remove('on'); $('#pick').classList.remove('on'); e.classList.add('on');
 }
 
-// position live (sert au ping et aux alertes de proximité ; l'affichage reste limité par les règles du jeu)
+// position live (sert au ping et aux alertes de proximité)
 function pushLive(force){
   if(!lastFix||!lref||!me) return;
   const t=Date.now(); if(!force && t-lastLive<3000) return; lastLive=t;
   lref.child(me.pid).set({lat:lastFix.lat,lng:lastFix.lng,t:now()});
 }
-function pinIcon(p){ return L.divIcon({className:'',html:`<div class="pin hider">${esc((p.name||'?')[0].toUpperCase())}</div>`,iconSize:[30,30]}); }
+function pinIcon(p){ return L.divIcon({className:'',html:`<div class="pin">${esc((p.name||'?')[0].toUpperCase())}</div>`,iconSize:[34,34]}); }
 function clearMarkers(){ Object.keys(markers).forEach(id=>{ map.removeLayer(markers[id]); delete markers[id]; }); }
 function showHiders(){
   const t=now();
@@ -374,14 +865,15 @@ function showHiders(){
     if(p.team!=='hider'||p.caught) return;
     const l=live[p.id]; if(!l||t-l.t>30000) return;
     const ll=[l.lat,l.lng], age=Math.max(0,Math.round((t-l.t)/1000));
-    if(!markers[p.id]) markers[p.id]=L.marker(ll,{icon:pinIcon(p),zIndexOffset:900}).addTo(map).bindTooltip('',{permanent:true,direction:'top',offset:[0,-16]});
+    if(!markers[p.id]) markers[p.id]=L.marker(ll,{icon:pinIcon(p),zIndexOffset:900}).addTo(map).bindTooltip('',{permanent:true,direction:'top',offset:[0,-20]});
     markers[p.id].setLatLng(ll).setTooltipContent(esc(p.name)+' · '+age+' s');
   });
 }
 
 // alertes de proximité
-function showProx(text, level){
-  const el=$('#prox'); el.textContent='⚠ '+text; el.classList.add('on');
+function showProx(level, who, text){
+  $('#proxN').textContent = level+' m'; $('#proxT').textContent = who+' est proche';
+  const el=$('#prox'); el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
   clearTimeout(proxTimer); proxTimer=setTimeout(()=>el.classList.remove('on'),4000);
   playBeep(); setTimeout(()=>speak(text),300);
   try{ navigator.vibrate&&navigator.vibrate(level===0?[400,100,400]:200); }catch(e){}
@@ -398,10 +890,11 @@ function proximity(el, mine){
   });
   if(best>50){ if(best>60) lastLevel=99; return; }
   const level = best<3 ? 0 : Math.ceil(best/10)*10;
-  if(level>lastLevel+10){ lastLevel=level; return; }   // il s'est éloigné : on réarme
+  if(level>lastLevel+10){ lastLevel=level; return; }
   if(level<lastLevel){
     lastLevel=level;
-    showProx('Vous êtes à '+level+' mètre'+(level>1?'s':'')+' d’'+(mine.team==='hider'?'un chercheur':'un caché'), level);
+    const who = mine.team==='hider'?'Un chercheur':'Un caché';
+    showProx(level, who, 'Vous êtes à '+level+' mètre'+(level>1?'s':'')+' d’'+(mine.team==='hider'?'un chercheur':'un caché'));
   }
 }
 
@@ -411,26 +904,32 @@ function tick(){
   const P=game.pingEvery, pk=Math.floor(el/P);
   const pingActive = el>=P && (el-pk*P) < game.pingLen*sp;
 
-  // zone
+  // zone + gaz
   zoneC.setLatLng([z.c.lat,z.c.lng]); zoneC.setRadius(z.R);
-  if(z.next){ nextC.setLatLng([z.next.c.lat,z.next.c.lng]); nextC.setRadius(z.next.R); nextC.setStyle({opacity:1}); } else nextC.setStyle({opacity:0});
+  const c0=game.centers[0];
+  gasP.setLatLngs([[[c0.lat-0.6,c0.lng-0.9],[c0.lat-0.6,c0.lng+0.9],[c0.lat+0.6,c0.lng+0.9],[c0.lat+0.6,c0.lng-0.9]], circlePts(z.c,z.R,72)]);
+  if(z.next){ nextC.setLatLng([z.next.c.lat,z.next.c.lng]); nextC.setRadius(z.next.R); nextC.setStyle({opacity:.8}); } else nextC.setStyle({opacity:0});
+
+  // barre de phase
+  document.querySelectorAll('#track div').forEach(d=>{ const i=+d.dataset.i; d.className = el<0 ? (i===0?'now':'') : (i<z.n?'done':i===z.n?'now':''); });
 
   // HUD
-  if(el<0){ $('#h1l').textContent='Départ dans'; $('#h1').textContent=fmt(-el); $('#h2').textContent=fmt(P/sp); }
+  if(el<0){ $('#c1l').textContent='Départ dans'; $('#c1v').textContent=fmt(-el); $('#c2l').textContent='Prochain ping'; $('#c2v').textContent=fmt(P/sp); }
   else{
-    $('#h1l').textContent = (z.closing?'🔻 Se ferme ':'Zone ')+Math.round(z.R)+' m';
-    $('#h1').textContent = z.next ? fmt(z.nextIn/sp) : 'finale';
-    $('#h2l').textContent = pingActive ? 'Ping' : 'Prochain ping';
-    $('#h2').textContent = pingActive ? '🔴 EN COURS' : fmt(((pk+1)*P-el)/sp);
+    $('#c1l').textContent = z.closing ? 'Se ferme vers '+Math.round(z.next?z.R:z.R)+' m' : 'Zone '+Math.round(z.R)+' m';
+    $('#c1v').textContent = z.next ? fmt(z.nextIn/sp) : 'finale';
+    $('#c2l').textContent = pingActive ? 'Ping en cours' : 'Prochain ping';
+    $('#c2v').textContent = pingActive ? '5 s' : fmt(((pk+1)*P-el)/sp);
   }
-  if(el<game.targetAt){ $('#h3l').textContent='Destruction dans'; $('#h3').textContent=fmt((game.targetAt-el)/sp); }
-  else{ $('#h3l').textContent='Fin de partie'; $('#h3').textContent=fmt((game.endAt-el)/sp); }
+  $('#c2').classList.toggle('hot', pingActive);
+  if(el<game.targetAt){ $('#c3l').textContent='Destruction dans'; $('#c3v').textContent=fmt((game.targetAt-el)/sp); }
+  else{ $('#c3l').textContent='Fin de partie'; $('#c3v').textContent=fmt((game.endAt-el)/sp); }
 
   // zone de destruction
   if(el>=game.targetAt && !tgtM){
     const tl=[game.target.lat,game.target.lng];
-    tgtM=L.marker(tl,{icon:L.divIcon({className:'',html:'<div class="tgt">💥</div>',iconSize:[30,30]})}).addTo(map);
-    tgtC=L.circle(tl,{radius:TARGET_RADIUS,color:'#ef4444',weight:2}).addTo(map);
+    tgtM=L.marker(tl,{icon:L.divIcon({className:'',html:'<div class="tgt">💥</div>',iconSize:[34,34]})}).addTo(map);
+    tgtC=L.circle(tl,{radius:TARGET_RADIUS,color:'#ff3d6e',weight:2,fillOpacity:.2,interactive:false}).addTo(map);
   }
 
   // position live + ping
@@ -442,24 +941,32 @@ function tick(){
   }
   if(pingActive && !isHider) showHiders(); else clearMarkers();
 
-  // alertes de proximité
   proximity(el, mine);
+
+  // bord de zone + vignette
+  let out=false;
+  if(lastFix){
+    const edge = z.R - dist(lastFix,z.c); out = edge<0;
+    const ei=$('#edgeInfo'); ei.className='edge'+(out?' bad':'');
+    ei.innerHTML = out ? `<b>Hors zone de ${Math.round(-edge)} m</b>` : `<span class="mut">Bord de zone à</span> <b>${Math.round(edge)} m</b>`;
+  }
+  const vig=$('#vig'); vig.className = pingActive&&isHider ? 'ping' : (out&&el>=0&&!mine.caught ? 'out' : '');
 
   // bandeau
   const b=$('#banner'); let msg='', cls='';
-  if(el<0){ msg = isHider ? '🤫 Cache-toi ! Les chercheurs attendent.' : '⏳ Les cachés se cachent… patience.'; cls='on'; }
-  else if(pingActive){ msg = isHider ? '🚨 TU ES REPÉRÉ ! Bouge !' : '👁 Cachés visibles pendant 5 s !'; cls='on bad'; }
-  else if(lastFix && dist(lastFix,z.c)>z.R && mine.team && !mine.caught){
-    msg='⚠ Tu es hors de la zone ! Reviens dedans.'; cls='on bad';
+  if(el<0){ msg = isHider ? 'Cache-toi. Les chercheurs attendent.' : 'Patiente : les cachés se cachent.'; cls='on'; }
+  else if(pingActive){ msg = isHider ? 'Tu es repéré. Bouge !' : 'Les cachés sont visibles pendant 5 s.'; cls='on bad'; }
+  else if(out && mine.team && !mine.caught){
+    msg='Tu es hors de la zone. Reviens dans le cercle.'; cls='on bad';
     if(Date.now()-lastVibe>15000){ lastVibe=Date.now(); try{navigator.vibrate&&navigator.vibrate([300,100,300]);}catch(e){} }
-  } else if(el>=game.targetAt){ msg='💥 Zone de destruction visible ! Cachés : rejoignez-la.'; cls='on'; }
+  } else if(el>=game.targetAt){ msg='La zone de destruction est visible sur la carte.'; cls='on'; }
   b.textContent=msg; b.className=cls;
-  renderPlayers();
+  renderPlayers(); handleClaims(); handleEvents();
 
   // fin de partie
   const hs=players().filter(p=>p.team==='hider');
   if(hs.length && hs.every(p=>p.caught)) endGame('seekers','Tous les cachés ont été trouvés.');
-  else if(el>game.endAt) endGame('seekers',"Le point n'a pas été détruit à temps.");
+  else if(el>game.endAt) endGame('seekers','Le point n’a pas été détruit à temps.');
 }
 setInterval(tick,1000);
 

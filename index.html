@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cache-cache GPS</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--bg:#0f1419;--card:#1a222c;--line:#2a3542;--txt:#e8eef5;--mut:#8a98a8;--seek:#ef4444;--hide:#3b82f6;--ok:#22d3a0;--warn:#f59e0b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.screen{display:none;position:fixed;inset:0;overflow:auto;padding:max(20px,env(safe-area-inset-top)) 20px 30px}
+.screen.on{display:block}
+h1{margin:10px 0 4px;font-size:28px}h2{margin:18px 0 8px;font-size:18px}
+p.sub{color:var(--mut);margin:0 0 20px}
+input,button,select{font:inherit;border-radius:12px;border:1px solid var(--line);padding:14px;width:100%;background:var(--card);color:var(--txt);margin:6px 0}
+input[type=checkbox]{width:auto;margin-right:8px}
+button{background:var(--ok);color:#052e22;font-weight:700;border:0;cursor:pointer}
+button.sec{background:var(--card);color:var(--txt);border:1px solid var(--line)}
+button.red{background:var(--seek);color:#fff}button.blue{background:var(--hide);color:#fff}
+button:disabled{opacity:.4}
+.or{text-align:center;color:var(--mut);margin:10px 0}
+.err{color:#fca5a5;min-height:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
+.code{font-size:44px;font-weight:800;letter-spacing:8px;text-align:center;margin:4px 0}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.pl{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.pl:last-child{border:0}
+.tag{font-size:12px;padding:2px 8px;border-radius:99px;font-weight:700}
+.tag.seeker{background:var(--seek)}.tag.hider{background:var(--hide)}.tag.none{background:var(--line);color:var(--mut)}
+pre{background:#0b0f14;padding:12px;border-radius:10px;overflow:auto;font-size:13px}
+ol li{margin:6px 0}
+#map{position:absolute;inset:0}
+#hud{position:absolute;z-index:500;left:8px;right:8px;top:max(8px,env(safe-area-inset-top));display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.chip{background:rgba(15,20,25,.9);border:1px solid var(--line);border-radius:12px;padding:6px 8px;text-align:center}
+.chip small{display:block;color:var(--mut);font-size:11px}.chip b{font-size:17px;font-variant-numeric:tabular-nums}
+#banner{position:absolute;z-index:500;left:8px;right:8px;top:calc(max(8px,env(safe-area-inset-top)) + 64px);display:none;background:var(--warn);color:#2b1a00;font-weight:700;border-radius:12px;padding:10px;text-align:center}
+#banner.on{display:block}#banner.bad{background:var(--seek);color:#fff}
+#bottom{position:absolute;z-index:500;left:0;right:0;bottom:0;background:rgba(15,20,25,.96);border-top:1px solid var(--line);padding:10px 14px max(12px,env(safe-area-inset-bottom));max-height:46%;overflow:auto}
+#bottom .head{display:flex;justify-content:space-between;color:var(--mut);font-size:13px}
+.pin{width:30px;height:30px;border-radius:50%;border:3px solid #fff;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+.pin.seeker{background:var(--seek)}.pin.hider{background:var(--hide)}.pin.caught{background:#6b7280}
+.me{width:18px;height:18px;border-radius:50%;background:#22d3a0;border:3px solid #fff;box-shadow:0 0 0 6px rgba(34,211,160,.3)}
+.tgt{font-size:30px}
+.leaflet-tooltip{font-size:12px}
+#end{background:rgba(0,0,0,.85);z-index:2000;text-align:center;padding-top:25vh}
+#end .big{font-size:34px;font-weight:800;margin:8px 0}
+button.mini{width:auto;padding:4px 10px;margin:0;font-size:13px}
+</style>
+</head>
+<body>
+
+<!-- CONFIG FIREBASE MANQUANTE -->
+<div id="setup" class="screen">
+  <h1>Configuration (1 fois)</h1>
+  <p class="sub">Il manque la config Firebase pour synchroniser les joueurs.</p>
+  <ol>
+    <li>Va sur <b>console.firebase.google.com</b> → Ajouter un projet (gratuit).</li>
+    <li>Menu <b>Build → Realtime Database → Créer</b> (région Belgique ou Europe).</li>
+    <li>Onglet <b>Règles</b>, colle ceci puis Publier :
+<pre>{ "rules": { "games": { ".read": true, ".write": true } } }</pre></li>
+    <li>Roue ⚙ → Paramètres du projet → <b>Ajouter une appli Web</b> → copie l'objet <code>firebaseConfig</code>.</li>
+    <li>Colle-le dans ce fichier à la ligne <code>FIREBASE_CONFIG</code>, puis héberge le fichier (Netlify Drop / GitHub Pages) : le GPS exige du HTTPS.</li>
+  </ol>
+</div>
+
+<div id="home" class="screen">
+  <h1>🕵️ Cache-cache GPS</h1>
+  <p class="sub">4 chercheurs · 4 cachés · zone qui rétrécit</p>
+  <input id="name" placeholder="Ton prénom" maxlength="14" autocomplete="off">
+  <button id="btnCreate">Créer une partie</button>
+  <div class="or">ou</div>
+  <input id="code" placeholder="CODE" maxlength="4" autocapitalize="characters" style="text-align:center;letter-spacing:6px;text-transform:uppercase">
+  <button id="btnJoin" class="sec">Rejoindre</button>
+  <p id="homeErr" class="err"></p>
+</div>
+
+<div id="lobby" class="screen">
+  <p class="sub" style="margin-bottom:0">Code de la partie</p>
+  <div class="code" id="lobCode">----</div>
+  <button class="sec" id="btnShare">Partager le code</button>
+  <div class="row">
+    <button class="red" id="btnSeeker">Chercheur <span id="nSeeker"></span></button>
+    <button class="blue" id="btnHider">Caché <span id="nHider"></span></button>
+  </div>
+  <div class="card" id="lobPlayers"></div>
+  <div class="card" id="hostBox" style="display:none">
+    <h2 style="margin-top:0">Réglages (hôte)</h2>
+    <label>Rayon de départ (m)</label>
+    <input id="r0" type="number" value="800" min="100" step="50" inputmode="numeric">
+    <label><input type="checkbox" id="testmode">Mode test (temps ×10)</label>
+    <p class="sub" style="margin:6px 0">Le centre de la zone = ta position actuelle. Les cachés ont 2 min pour se cacher.</p>
+    <button id="btnStart">Lancer la partie</button>
+  </div>
+  <p id="lobMsg" class="sub"></p>
+  <button class="sec" id="btnLeave">Quitter</button>
+</div>
+
+<div id="game" class="screen" style="padding:0;overflow:hidden">
+  <div id="map"></div>
+  <div id="hud">
+    <div class="chip"><small id="h1l">Zone</small><b id="h1">--</b></div>
+    <div class="chip"><small>Prochain relevé</small><b id="h2">--</b></div>
+    <div class="chip"><small id="h3l">Destruction</small><b id="h3">--</b></div>
+  </div>
+  <div id="banner"></div>
+  <div id="bottom">
+    <div class="head"><span id="gpsState">GPS…</span><span id="myRole"></span></div>
+    <div id="actions"></div>
+    <div id="gamePlayers"></div>
+  </div>
+</div>
+
+<div id="end" class="screen">
+  <div class="big" id="endTitle"></div>
+  <p class="sub" id="endSub"></p>
+  <button id="btnEndLeave" style="max-width:300px">Retour à l'accueil</button>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+// ====== COLLE ICI TA CONFIG FIREBASE ======
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDF--SCWo_FPSkNHuJPICJADxekOgjbiHk",
+  authDomain: "cache-cache-2c9d1.firebaseapp.com",
+  databaseURL: "https://cache-cache-2c9d1-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "cache-cache-2c9d1",
+  appId: "1:432721301411:web:3dadd425b01bd44ecd5416"
+};
+// ==========================================
+
+const MAX_PER_TEAM = 4, HIDE_DELAY = 120000, TARGET_RADIUS = 30;
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = ms => { ms = Math.max(0, Math.round(ms/1000)); return String(Math.floor(ms/60)).padStart(2,'0')+':'+String(ms%60).padStart(2,'0'); };
+function show(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on', s.id===id)); }
+
+if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.startsWith('COLLE')) { show('setup'); throw new Error('Firebase non configuré'); }
+
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+let offset = 0;
+db.ref('.info/serverTimeOffset').on('value', s => offset = s.val() || 0);
+const now = () => Date.now() + offset;
+
+let me = null, game = null, gref = null, lastFix = null, gpsId = null;
+let map = null, zoneC = null, nextC = null, meM = null, tgtM = null, tgtC = null;
+const markers = {};
+let uploadedTick = 0, lastVibe = 0, wakeLock = null;
+try { me = JSON.parse(localStorage.getItem('cc_me') || 'null'); } catch(e){}
+const saveMe = () => { try { me ? localStorage.setItem('cc_me', JSON.stringify(me)) : localStorage.removeItem('cc_me'); } catch(e){} };
+
+// ---------- géométrie ----------
+function dist(a,b){const R=6371000,t=Math.PI/180,dLa=(b.lat-a.lat)*t,dLo=(b.lng-a.lng)*t;const x=Math.sin(dLa/2)**2+Math.cos(a.lat*t)*Math.cos(b.lat*t)*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
+function randPoint(c,rad){const r=rad*Math.sqrt(Math.random()),a=Math.random()*2*Math.PI;return{lat:c.lat+r*Math.cos(a)/111320,lng:c.lng+r*Math.sin(a)/(111320*Math.cos(c.lat*Math.PI/180))};}
+const getPos = () => new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(p=>res({lat:p.coords.latitude,lng:p.coords.longitude}),rej,{enableHighAccuracy:true,timeout:15000}));
+
+// ---------- GPS ----------
+function setGps(t){ $('#gpsState').textContent = t; }
+function startGps(){
+  if (gpsId!=null) return;
+  if (!navigator.geolocation){ setGps('GPS indisponible'); return; }
+  gpsId = navigator.geolocation.watchPosition(p=>{
+    lastFix = {lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy};
+    setGps('GPS ±'+Math.round(p.coords.accuracy)+' m'); updateMe();
+  }, ()=>setGps('⚠ GPS refusé ou indisponible'), {enableHighAccuracy:true,maximumAge:2000,timeout:20000});
+}
+async function keepAwake(){ try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){} }
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden && game && game.status==='running') keepAwake(); });
+
+// ---------- accueil ----------
+function genCode(){ const c='ABCDEFGHJKMNPQRSTUVWXYZ'; return Array.from({length:4},()=>c[Math.floor(Math.random()*c.length)]).join(''); }
+const rid = () => Math.random().toString(36).slice(2,10);
+
+$('#btnCreate').onclick = async () => {
+  const name = $('#name').value.trim(); if(!name) return $('#homeErr').textContent='Entre ton prénom.';
+  const code = genCode(), pid = rid();
+  await db.ref('games/'+code).set({status:'lobby',hostId:pid,createdAt:firebase.database.ServerValue.TIMESTAMP,players:{[pid]:{name,team:'',caught:false}}});
+  me = {pid,name,code}; saveMe(); attach();
+};
+$('#btnJoin').onclick = async () => {
+  const name = $('#name').value.trim(), code = $('#code').value.trim().toUpperCase();
+  if(!name) return $('#homeErr').textContent='Entre ton prénom.';
+  if(code.length!==4) return $('#homeErr').textContent='Code à 4 lettres.';
+  const snap = await db.ref('games/'+code).once('value'), g = snap.val();
+  if(!g) return $('#homeErr').textContent='Partie introuvable.';
+  if(g.status!=='lobby') return $('#homeErr').textContent='Partie déjà lancée.';
+  if(Object.keys(g.players||{}).length>=MAX_PER_TEAM*2) return $('#homeErr').textContent='Partie pleine (8 joueurs).';
+  const pid = rid();
+  await db.ref(`games/${code}/players/${pid}`).set({name,team:'',caught:false});
+  me = {pid,name,code}; saveMe(); attach();
+};
+function attach(){
+  if(gref) gref.off();
+  gref = db.ref('games/'+me.code);
+  startGps();
+  gref.on('value', s => { game = s.val(); if(!game){ leave(true); return; } render(); });
+}
+function leave(silent){
+  if(gref){ gref.off(); gref=null; }
+  if(me && game && game.status==='lobby' && !silent) db.ref(`games/${me.code}/players/${me.pid}`).remove();
+  me=null; game=null; saveMe(); show('home');
+}
+$('#btnLeave').onclick = () => leave(false);
+$('#btnEndLeave').onclick = () => { $('#end').classList.remove('on'); leave(true); location.reload(); };
+
+// ---------- lobby ----------
+const players = () => Object.entries((game&&game.players)||{}).map(([id,p])=>({id,...p}));
+const count = t => players().filter(p=>p.team===t).length;
+function setTeam(t){ if(count(t)>=MAX_PER_TEAM && (game.players[me.pid].team!==t)) return; db.ref(`games/${me.code}/players/${me.pid}/team`).set(t); }
+$('#btnSeeker').onclick = () => setTeam('seeker');
+$('#btnHider').onclick = () => setTeam('hider');
+$('#btnShare').onclick = async () => {
+  const txt = 'Cache-cache GPS : code '+me.code+' — '+location.href;
+  try{ if(navigator.share) await navigator.share({text:txt}); else { await navigator.clipboard.writeText(txt); $('#lobMsg').textContent='Copié !'; } }catch(e){}
+};
+function renderLobby(){
+  $('#lobCode').textContent = me.code;
+  $('#nSeeker').textContent = count('seeker')+'/'+MAX_PER_TEAM;
+  $('#nHider').textContent = count('hider')+'/'+MAX_PER_TEAM;
+  $('#lobPlayers').innerHTML = players().map(p=>`<div class="pl"><span>${esc(p.name)}${p.id===game.hostId?' 👑':''}</span><span class="tag ${p.team||'none'}">${p.team==='seeker'?'Chercheur':p.team==='hider'?'Caché':'—'}</span></div>`).join('');
+  const host = me.pid===game.hostId;
+  $('#hostBox').style.display = host?'block':'none';
+  const ok = count('seeker')>=1 && count('hider')>=1 && players().every(p=>p.team);
+  $('#btnStart').disabled = !ok;
+  $('#lobMsg').textContent = host ? (ok?'':'Il faut au moins 1 chercheur et 1 caché, et que chacun ait choisi son équipe.') : "En attente du lancement par l'hôte…";
+}
+$('#btnStart').onclick = async () => {
+  $('#btnStart').disabled = true;
+  try{
+    const fix = lastFix || await getPos();
+    const r0 = Math.max(100, +$('#r0').value||800), speed = $('#testmode').checked?10:1;
+    const factor = 0.8, every = 360000, duration = 2700000;
+    const finalR = r0*Math.pow(factor, Math.floor(duration/every));
+    await gref.update({status:'running',center:{lat:fix.lat,lng:fix.lng},r0,speed,shrinkFactor:factor,shrinkEvery:every,revealEvery:300000,duration,overtime:600000,
+      target:randPoint(fix, finalR*0.7), startAt: now()+HIDE_DELAY});
+  }catch(e){ $('#lobMsg').textContent='Position introuvable : autorise le GPS.'; $('#btnStart').disabled=false; }
+};
+
+// ---------- jeu ----------
+const elapsed = () => { const r = now()-game.startAt; return r>=0 ? r*game.speed : r; };
+function zoneInfo(el){
+  const maxN = Math.floor(game.duration/game.shrinkEvery);
+  const n = Math.min(Math.floor(Math.max(el,0)/game.shrinkEvery), maxN);
+  return { n, maxN, R: game.r0*Math.pow(game.shrinkFactor,n), nextR: n<maxN ? game.r0*Math.pow(game.shrinkFactor,n+1) : null };
+}
+function ensureMap(){
+  if(map) return;
+  const c = [game.center.lat, game.center.lng];
+  map = L.map('map',{zoomControl:false}).setView(c,16);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  zoneC = L.circle(c,{radius:game.r0,color:'#22d3a0',weight:3,fillOpacity:.06}).addTo(map);
+  nextC = L.circle(c,{radius:game.r0,color:'#f59e0b',weight:2,dashArray:'6 8',fill:false}).addTo(map);
+  map.fitBounds(zoneC.getBounds(),{paddingBottomRight:[0,160]});
+  setTimeout(()=>map.invalidateSize(),200);
+}
+function updateMe(){
+  if(!map||!lastFix) return;
+  const ll=[lastFix.lat,lastFix.lng];
+  if(!meM) meM = L.marker(ll,{icon:L.divIcon({className:'',html:'<div class="me"></div>',iconSize:[18,18]}),zIndexOffset:1000}).addTo(map);
+  else meM.setLatLng(ll);
+}
+function render(){
+  if(!me||!game){ show('home'); return; }
+  if(!game.players || !game.players[me.pid]){ leave(true); return; }
+  if(game.status==='lobby'){ show('lobby'); renderLobby(); return; }
+  show('game'); ensureMap(); keepAwake(); updateMe(); renderPlayers();
+  if(game.status==='ended') showEnd();
+}
+function pinIcon(p){ const cls=p.caught?'caught':p.team; return L.divIcon({className:'',html:`<div class="pin ${cls}">${esc((p.name||'?')[0].toUpperCase())}</div>`,iconSize:[30,30]}); }
+function renderPlayers(){
+  const t = now();
+  const mine = game.players[me.pid];
+  $('#myRole').textContent = mine.team==='seeker'?'🔴 Chercheur':(mine.caught?'⚪ Trouvé':'🔵 Caché');
+  const rows = players().sort((a,b)=>a.team.localeCompare(b.team)).map(p=>{
+    const age = p.pos ? 'relevé il y a '+Math.floor((t-p.pos.t)/60000)+' min' : 'pas encore localisé';
+    const canCatch = p.team==='hider' && !p.caught && mine.team==='seeker' && game.status==='running';
+    return `<div class="pl"><span><span class="tag ${p.caught?'none':p.team}">${p.team==='seeker'?'C':'H'}</span> ${esc(p.name)}${p.id===me.pid?' (moi)':''}${p.caught?' — trouvé':''}<br><small style="color:var(--mut)">${age}</small></span>${canCatch?`<button class="mini red" data-catch="${p.id}">Trouvé</button>`:''}</div>`;
+  }).join('');
+  $('#gamePlayers').innerHTML = rows;
+  // marqueurs (relevés)
+  players().forEach(p=>{
+    if(p.id===me.pid || !p.pos) return;
+    const ll=[p.pos.lat,p.pos.lng], age=Math.floor((t-p.pos.t)/60000);
+    if(!markers[p.id]){ markers[p.id]=L.marker(ll,{icon:pinIcon(p)}).addTo(map).bindTooltip('',{permanent:true,direction:'top',offset:[0,-16]}); }
+    markers[p.id].setLatLng(ll).setIcon(pinIcon(p)).setTooltipContent(esc(p.name)+' · '+age+' min');
+  });
+  // actions
+  let act='';
+  if(mine.team==='hider' && !mine.caught && game.status==='running') act+=`<button class="sec" id="btnCaught">Je me suis fait trouver</button>`;
+  if(game.status==='running' && mine.team==='hider' && !mine.caught && lastFix && elapsed()>=game.duration && dist(lastFix,game.target)<=TARGET_RADIUS) act+=`<button class="red" id="btnDestroy">💥 Détruire le point</button>`;
+  if($('#actions').dataset.sig!==act){ $('#actions').innerHTML=act; $('#actions').dataset.sig=act; }
+}
+document.addEventListener('click',e=>{
+  const c=e.target.closest('[data-catch]'); if(c) db.ref(`games/${me.code}/players/${c.dataset.catch}/caught`).set(true);
+  if(e.target.id==='btnCaught') db.ref(`games/${me.code}/players/${me.pid}/caught`).set(true);
+  if(e.target.id==='btnDestroy') endGame('hiders','Point de destruction détruit par '+me.name+' !');
+});
+function endGame(winner,reason){ if(game&&game.status==='running') gref.update({status:'ended',winner,reason}); }
+function showEnd(){
+  const mineTeam=game.players[me.pid].team, won=(game.winner==='hiders')===(mineTeam==='hider');
+  $('#endTitle').textContent = game.winner==='hiders'?'🔵 Les cachés gagnent !':'🔴 Les chercheurs gagnent !';
+  $('#endSub').textContent = (won?'Victoire — ':'Défaite — ')+(game.reason||'');
+  $('#end').classList.add('on');
+}
+
+function tick(){
+  if(!game||!me||game.status!=='running'||!map) return;
+  const el=elapsed(), sp=game.speed, z=zoneInfo(el), mine=game.players[me.pid];
+  zoneC.setRadius(z.R); nextC.setRadius(z.nextR||z.R); nextC.setStyle({opacity:z.nextR?1:0});
+  // HUD
+  if(el<0){ $('#h1l').textContent='Départ dans'; $('#h1').textContent=fmt(-el); $('#h2').textContent=fmt(game.revealEvery/sp); }
+  else{
+    $('#h1l').textContent='Zone '+Math.round(z.R)+' m';
+    $('#h1').textContent = z.nextR ? fmt(((z.n+1)*game.shrinkEvery-el)/sp) : 'finale';
+    $('#h2').textContent = fmt(((Math.floor(el/game.revealEvery)+1)*game.revealEvery-el)/sp);
+  }
+  if(el<game.duration){ $('#h3l').textContent='Destruction dans'; $('#h3').textContent=fmt((game.duration-Math.max(el,0))/sp+(el<0?0:0)); }
+  else{ $('#h3l').textContent='Point révélé'; $('#h3').textContent=fmt((game.duration+game.overtime-el)/sp); }
+  // point de destruction
+  if(el>=game.duration && !tgtM){
+    const tl=[game.target.lat,game.target.lng];
+    tgtM=L.marker(tl,{icon:L.divIcon({className:'',html:'<div class="tgt">💥</div>',iconSize:[30,30]})}).addTo(map);
+    tgtC=L.circle(tl,{radius:TARGET_RADIUS,color:'#ef4444',weight:2}).addTo(map);
+  }
+  // relevé de position toutes les 5 min
+  const k=Math.floor(el/game.revealEvery);
+  if(el>=0 && k>=1 && uploadedTick<k && lastFix){
+    uploadedTick=k;
+    gref.child('players/'+me.pid+'/pos').set({lat:lastFix.lat,lng:lastFix.lng,t:firebase.database.ServerValue.TIMESTAMP,tick:k});
+  }
+  // hors zone
+  const b=$('#banner'); b.className='';
+  if(el<0){ b.textContent = mine.team==='hider' ? '🤫 Cache-toi ! Les chercheurs attendent.' : '⏳ Les cachés se cachent… patience.'; b.className='on'; }
+  else if(lastFix && dist(lastFix,game.center)>z.R && mine.team && !mine.caught){
+    b.textContent='⚠ Tu es hors de la zone ! Reviens dedans.'; b.className='on bad';
+    if(Date.now()-lastVibe>15000){ lastVibe=Date.now(); try{navigator.vibrate&&navigator.vibrate([300,100,300]);}catch(e){} }
+  } else if(el>=game.duration){ b.textContent='💥 Le point de destruction est visible ! Cachés : rejoignez-le.'; b.className='on'; }
+  renderPlayers();
+  // fin de partie
+  const hs=players().filter(p=>p.team==='hider');
+  if(hs.length && hs.every(p=>p.caught)) endGame('seekers','Tous les cachés ont été trouvés.');
+  else if(el>game.duration+game.overtime) endGame('seekers',"Le point n'a pas été détruit à temps.");
+}
+setInterval(tick,1000);
+
+if(me) attach(); else show('home');
+</script>
+</body>
+</html>

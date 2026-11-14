@@ -83,6 +83,7 @@ button,input{font:inherit;color:inherit}
 
 /* jeu */
 #map{position:absolute;inset:0;background:#0b0a17}
+#map .leaflet-tile-pane{filter:invert(1) hue-rotate(185deg) brightness(.9) contrast(.92) saturate(.6)}
 .leaflet-container{background:#0b0a17;font-family:inherit}
 .leaflet-control-attribution{background:rgba(11,10,23,.7)!important;color:#7d79a8!important;font-size:10px}
 .leaflet-control-attribution a{color:#9a96c4!important}
@@ -154,9 +155,9 @@ button,input{font:inherit;color:inherit}
 #rules h2{font-size:48px;margin:6px 0 10px}
 #rules h3{font-size:24px;color:var(--gasHi);margin:18px 0 4px}
 #rules p{margin:0;color:#d6d1f7}
-#pick{background:var(--ink);z-index:2200;justify-content:flex-start;text-align:left;align-items:stretch}
-#pick .in{max-width:520px;margin:0 auto;width:100%}
-#pick h2{font-size:38px;margin:6px 0 4px}
+#pick,#tpick{background:var(--ink);z-index:2200;justify-content:flex-start;text-align:left;align-items:stretch}
+#pick .in,#tpick .in{max-width:520px;margin:0 auto;width:100%}
+#pick h2,#tpick h2{font-size:38px;margin:6px 0 4px}
 .pickrow{display:flex;align-items:center;gap:12px;text-align:left;margin:0 0 10px;font-weight:700;font-size:19px}
 .pickrow small{margin-left:auto;font-weight:500;color:var(--mut);font-size:14px}
 #claim{z-index:2500;background:radial-gradient(90% 60% at 50% 35%,#5a0f2c,var(--ink))}
@@ -214,6 +215,7 @@ button,input{font:inherit;color:inherit}
   <button id="btnJoin" class="btn ghost">Rejoindre avec le code</button>
   <p id="homeErr" class="err" role="alert"></p>
   <button id="btnRules" class="link">Comment ça marche ?</button>
+  <p class="mut" style="text-align:center;font-size:12px;margin:8px 0 0">Version 7</p>
 </div></section>
 
 <!-- LOBBY -->
@@ -285,6 +287,16 @@ button,input{font:inherit;color:inherit}
   </div>
 </div>
 
+<!-- TALKIE : CHOISIR QUI APPELER -->
+<div id="tpick" class="full" role="dialog">
+  <div class="in">
+    <h2>Parler à qui ?</h2>
+    <p class="mut" style="margin:0 0 18px">Touche un nom. Il reçoit ta demande et doit accepter. Ensuite, maintiens le gros bouton pour parler.</p>
+    <div id="tpickList"></div>
+    <button class="btn ghost" id="tpickClose" style="margin-top:10px">Fermer</button>
+  </div>
+</div>
+
 <!-- CONFIRMATION D'UN CACHÉ -->
 <div id="claim" class="full" role="alertdialog" aria-live="assertive">
   <div class="ring2" aria-hidden="true">👁</div>
@@ -328,7 +340,7 @@ button,input{font:inherit;color:inherit}
     <h3>Le ping</h3><p>Toutes les 3 minutes, les chercheurs voient les cachés sur la carte pendant 5 secondes. Pendant ce temps, la sirène retentit sur les téléphones des cachés.</p>
     <h3>Les alertes</h3><p>À moins de 50 m d'un adversaire, ton téléphone te prévient tous les 10 m, jusqu'à 0 m.</p>
     <h3>Quand on te trouve</h3><p>Un chercheur qui t'a trouvé touche ton nom dans l'appli. Ton téléphone sonne et te demande : « Avez-vous vraiment été trouvé par lui ? ». Tu réponds Oui ou Non. Si tu réponds Oui, tu es éliminé.</p>
-    <h3>Parler aux autres</h3><p>Ouvre la liste des joueurs (barre du bas) et touche « Parler » à côté d'un nom. Il reçoit « Benjamin veut te parler » et répond Oui ou Non. S'il accepte, maintiens le gros bouton pour parler et relâche pour écouter, comme un talkie-walkie. Il t'entend avec 1 seconde de retard environ.</p>
+    <h3>Parler aux autres</h3><p>Touche « 🎙 Talkie-walkie » en bas de l'écran et choisis un joueur. Il reçoit « Benjamin veut te parler » et répond Oui ou Non. S'il accepte, maintiens le gros bouton pour parler et relâche pour écouter, comme un talkie-walkie. Il t'entend avec 1 seconde de retard environ.</p>
     <h3>La zone de destruction</h3><p>Elle apparaît quand le cercle atteint 100 m. Un caché qui la rejoint (à moins de 20 m) et appuie sur « Détruire » fait gagner les cachés.</p>
     <h3>Fin de partie</h3><p>Les chercheurs gagnent s'ils trouvent tous les cachés, ou si le point n'est pas détruit 10 minutes après le dernier cercle.</p>
     <h3>Avant de jouer</h3><p>Autorise la localisation précise, laisse l'écran allumé, monte le volume et désactive le mode silencieux.</p>
@@ -581,8 +593,7 @@ function ensureMap(){
   if(map) return;
   const c0 = game.centers[0], c = [c0.lat, c0.lng];
   map = L.map('map',{zoomControl:false}).setView(c,16);
-  const dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:19,attribution:'© OpenStreetMap © CARTO'}).addTo(map);
-  dark.on('tileerror',()=>{ if(++tileErrs===6){ map.removeLayer(dark); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map); } });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
   const outer=[[c0.lat-0.6,c0.lng-0.9],[c0.lat-0.6,c0.lng+0.9],[c0.lat+0.6,c0.lng+0.9],[c0.lat+0.6,c0.lng-0.9]];
   gasP = L.polygon([outer, circlePts(c0,game.radii[0],72)],{stroke:false,fillColor:'#7c3aed',fillOpacity:.42,interactive:false}).addTo(map);
   zoneC = L.circle(c,{radius:game.radii[0],color:'#b79cff',weight:3,fill:false,interactive:false}).addTo(map);
@@ -617,13 +628,15 @@ function renderPlayers(){
   }).join('');
   let act='';
   if(mine.team==='hider' && !mine.caught && game.status==='running') act+=`<button class="btn ghost" id="btnCaught">On m'a trouvé</button>`;
+  if(game.status==='running' && !myCall) act+=`<button class="btn ghost" id="btnTalkPick">🎙 Talkie-walkie</button>`;
   if(mine.team==='seeker' && !mine.caught && game.status==='running') act+=`<button class="btn" id="btnFound">J'ai trouvé quelqu'un</button>`;
   if(game.status==='running' && mine.team==='hider' && !mine.caught && lastFix && elapsed()>=game.targetAt && dist(lastFix,game.target)<=TARGET_RADIUS) act=`<button class="btn danger" id="btnDestroy">💥 Détruire le point</button>`+act;
   if($('#actions').dataset.sig!==act){ $('#actions').innerHTML=act; $('#actions').dataset.sig=act; }
 }
 document.addEventListener('click',e=>{
   const c=e.target.closest('[data-catch]'); if(c) sendClaim(c.dataset.catch);
-  const tk=e.target.closest('[data-talk]'); if(tk) startCall(tk.dataset.talk);
+  const tk=e.target.closest('[data-talk]'); if(tk){ $('#tpick').classList.remove('on'); startCall(tk.dataset.talk); }
+  if(e.target.id==='btnTalkPick'){ renderTalkPick(); $('#tpick').classList.add('on'); }
   if(e.target.id==='btnFound'){ renderPick(); $('#pick').classList.add('on'); }
   if(e.target.id==='btnCaught') db.ref(`games/${me.code}/players/${me.pid}/caught`).set(true);
   if(e.target.id==='btnDestroy') endGame('hiders','Le point de destruction a été détruit par '+me.name+'.');
@@ -675,6 +688,11 @@ function handleClaims(){
   });
   if($('#pick').classList.contains('on')) renderPick();
 }
+function renderTalkPick(){
+  const others=players().filter(p=>p.id!==me.pid);
+  $('#tpickList').innerHTML = others.length ? others.map(p=>`<button class="btn ghost pickrow" data-talk="${p.id}">${avatar(p.name)}<span>${esc(p.name)}</span><small>${p.caught?'Trouvé':p.team==='seeker'?'Chercheur':'Caché'}</small></button>`).join('') : '<p class="mut">Personne d\u2019autre dans la partie.</p>';
+}
+$('#tpickClose').onclick = () => $('#tpick').classList.remove('on');
 // ===== Talkie-walkie : appel + bouton « maintenir pour parler » =====
 const VR = 8000;                       // voix en 8 kHz, compressée (µ-law) : léger et clair
 let ac=null, mic=null, procNode=null, srcNode=null, talking=false, rawBlocks=[], sendTimer=null, seq=0, playHead=0;

@@ -459,11 +459,15 @@ function genChime(){ // deux notes qui se répètent : demande de confirmation
 }
 const sirenA = new Audio(genSiren(5)), beepA = new Audio(genBeep()), chimeA = new Audio(genChime());
 sirenA.preload = beepA.preload = chimeA.preload = 'auto';
+// voix d'intro enregistrée (optionnelle) : si le fichier intro.mp3 est dans le dépôt, il remplace la voix de synthèse
+const introA = new Audio(); let introOK = null;
+introA.preload = 'auto'; introA.addEventListener('error',()=>{ introOK=false; }); introA.addEventListener('loadedmetadata',()=>{ introOK=true; }); introA.src = 'intro.mp3';
 let audioReady = false;
 function unlockAudio(){
   if(audioReady) return; audioReady = true;
   [sirenA,beepA,chimeA].forEach(a=>{ try{ a.muted=true; const p=a.play(); if(p&&p.then) p.then(()=>{a.pause();a.currentTime=0;a.muted=false;}).catch(()=>{a.muted=false;audioReady=false;}); }catch(e){ a.muted=false; audioReady=false; } });
   try{ speechSynthesis.speak(new SpeechSynthesisUtterance('')); }catch(e){}
+  if(introOK!==false){ try{ introA.muted=true; const q=introA.play(); if(q&&q.then) q.then(()=>{introA.pause();introA.currentTime=0;introA.muted=false;}).catch(()=>{introA.muted=false;}); else introA.muted=false; }catch(e){ introA.muted=false; } }
 }
 document.addEventListener('pointerdown', unlockAudio, {passive:true});
 document.addEventListener('touchend', unlockAudio, {passive:true});
@@ -596,18 +600,25 @@ function paintRole(t, final){
 // ---------- intro diabolique ----------
 const INTRO = [
   'Bienvenue dans le cache-cache de l’extrême.',
-  'Ici, personne ne joue pour rire. Vos téléphones vous suivent. Il n’y a aucune échappatoire.',
-  'Les équipes viennent d’être tirées au sort. Les chercheurs d’un côté. Les cachés de l’autre.',
-  'Les cachés ont '+(HIDE_DELAY/60000)+' minutes pour disparaître. Les chercheurs attendent. Et ils ont faim.',
-  'La zone se referme toutes les cinq minutes. Quatre cents mètres. Puis deux cent cinquante. Cent cinquante. Cent. Et cinquante.',
-  'Celui qui reste dans la tempête sera vu en direct. Et quand il en sort, dix secondes de honte en plus.',
-  'Toutes les trois minutes, la sirène hurle. Les chercheurs voient les cachés pendant cinq secondes.',
-  'Quand un chercheur te trouve, tu dois l’avouer. Et un caché qui détruit le point de destruction, remporte la partie.',
-  'Que le meilleur gagne. Ou que le plus lâche se fasse attraper. Bonne chance. Vous allez en avoir besoin. Ha. Ha. Ha.'
+  'Cachés : vous avez '+(HIDE_DELAY/60000)+' minutes pour disparaître.',
+  'Chercheurs : trouvez-les avant qu’ils détruisent le point.',
+  'La zone se referme. Qui reste dans la tempête sera vu en direct.',
+  'Toutes les trois minutes, la sirène hurle. Les cachés sont repérés.',
+  'Bonne chance. Vous allez en avoir besoin. Ha. Ha. Ha.'
+];
+// texte dit à voix haute : points de suspension = silences d'épouvante
+const SPOKEN = [
+  'Bienvenue... dans le cache-cache... de l’extrême.',
+  'Cachés... vous avez '+(HIDE_DELAY/60000)+' minutes... pour disparaître.',
+  'Chercheurs... trouvez-les... avant qu’ils détruisent le point.',
+  'La zone se referme... Qui reste dans la tempête... sera vu... en direct.',
+  'Toutes les trois minutes... la sirène hurle... Les cachés... sont repérés.',
+  'Bonne chance... Vous allez en avoir besoin... Ha... Ha... Ha...'
 ];
 function genDrone(){
-  const rate=8000, n=rate*6, a=new Float32Array(n);
-  for(let i=0;i<n;i++){ const t=i/rate; a[i]=0.22*(1+0.35*Math.sin(2*Math.PI*0.5*t))*(Math.sin(2*Math.PI*55*t)+0.55*Math.sin(2*Math.PI*82.5*t)+0.25*Math.sin(2*Math.PI*110*t))/1.8; }
+  const rate=8000, n=rate*6, a=new Float32Array(n); // 6 s = 5 battements de 1,2 s
+  for(let i=0;i<n;i++){ const t=i/rate; const ph=t%1.2, hb=(Math.exp(-ph*28)*Math.sin(2*Math.PI*48*ph))*0.9+(ph>0.22?Math.exp(-(ph-0.22)*30)*Math.sin(2*Math.PI*42*(ph-0.22))*0.6:0);
+    a[i]=0.2*(1+0.35*Math.sin(2*Math.PI*0.5*t))*(Math.sin(2*Math.PI*55*t)+0.55*Math.sin(2*Math.PI*82.5*t)+0.25*Math.sin(2*Math.PI*110*t))/1.8 + 0.35*hb; }
   return makeWav(a,rate);
 }
 let droneA=null, introOn=false, introTimer=null, introFb=null;
@@ -615,6 +626,7 @@ function pickVoice(){ try{ const v=speechSynthesis.getVoices().filter(x=>/^fr/i.
 function introFinish(){
   introOn=false; clearTimeout(introTimer); clearTimeout(introFb); try{ speechSynthesis.cancel(); }catch(e){}
   if(droneA){ try{ droneA.pause(); }catch(e){} }
+  try{ introA.pause(); }catch(e){}
   $('#introBtn').style.display='block'; $('#introSkip').style.display='none';
   $('#introLine').textContent='À toi de jouer.';
   document.querySelectorAll('#introDots i').forEach(d=>d.classList.add('on'));
@@ -624,6 +636,19 @@ function startIntro(key){
   $('#introBtn').style.display='none'; $('#introSkip').style.display='';
   $('#introDots').innerHTML = INTRO.map(()=>'<i></i>').join('');
   try{ if(!droneA){ droneA=new Audio(genDrone()); droneA.loop=true; droneA.volume=.5; } droneA.currentTime=0; droneA.play().catch(()=>{}); }catch(e){}
+  $('#introSkip').onclick = introFinish;
+  $('#introBtn').onclick = () => { try{localStorage.setItem(key,'1');}catch(e){} el.classList.remove('on'); maybeRole(); };
+  if(introOK===true){
+    // voix enregistrée : les phrases défilent selon la durée de l'audio
+    const total=INTRO.join('').length, starts=[]; let acc=0; INTRO.forEach(l=>{ starts.push(acc/total); acc+=l.length; });
+    let last=-1;
+    const upd=()=>{ if(!introOn) return; const f=(introA.currentTime||0)/(introA.duration||1); let k=0; starts.forEach((x,j)=>{ if(f>=x) k=j; });
+      if(k!==last){ last=k; $('#introLine').textContent=INTRO[k]; document.querySelectorAll('#introDots i').forEach((d,m)=>d.classList.toggle('on',m<=k)); } };
+    try{ if(droneA) droneA.volume=.18; }catch(e){}
+    introA.ontimeupdate=upd; introA.onended=introFinish; introA.currentTime=0; introA.muted=false;
+    introA.play().then(()=>{ upd(); }).catch(()=>{ introA.ontimeupdate=null; introA.onended=null; introOK=false; startIntro(key); });
+    return;
+  }
   let i=0;
   const next=()=>{
     if(!introOn) return;
@@ -631,9 +656,9 @@ function startIntro(key){
     const line=INTRO[i]; $('#introLine').textContent=line;
     document.querySelectorAll('#introDots i').forEach((d,k)=>d.classList.toggle('on',k<=i)); i++;
     let done=false;
-    const go=()=>{ if(done||!introOn) return; done=true; clearTimeout(introFb); clearTimeout(introTimer); introTimer=setTimeout(next,900); };
-    introFb=setTimeout(go, line.length*105+2500);
-    try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(line); u.lang='fr-FR'; u.pitch=.1; u.rate=.78; u.volume=1; const v=pickVoice(); if(v) u.voice=v; u.onend=go; speechSynthesis.speak(u); }catch(e){}
+    const go=()=>{ if(done||!introOn) return; done=true; clearTimeout(introFb); clearTimeout(introTimer); introTimer=setTimeout(next,1500); };
+    introFb=setTimeout(go, line.length*150+3500);
+    try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(SPOKEN[i-1]||line); u.lang='fr-FR'; u.pitch=.05; u.rate=.62; u.volume=1; const v=pickVoice(); if(v) u.voice=v; u.onend=go; speechSynthesis.speak(u); }catch(e){}
   };
   setTimeout(next,600);
   $('#introSkip').onclick = introFinish;

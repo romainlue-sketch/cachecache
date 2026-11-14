@@ -131,6 +131,16 @@ button,input{font:inherit;color:inherit}
 .tgt{font-size:34px;filter:drop-shadow(0 0 10px #ff3d6e)}
 .leaflet-tooltip{background:var(--ink);color:var(--txt);border:1px solid var(--line);font-weight:600}
 
+/* intro diabolique */
+#intro{background:radial-gradient(100% 80% at 50% 30%,#4a0a14,#0a0408 70%);z-index:2100;justify-content:space-between!important}
+#intro h1{font-size:clamp(40px,12.5vw,80px);line-height:.92;color:#ff3d4e;text-shadow:0 0 28px rgba(255,61,78,.55);margin:6vh 0 0;animation:flick 3.2s infinite}
+@keyframes flick{0%,92%,100%{opacity:1}93%{opacity:.55}95%{opacity:1}97%{opacity:.7}}
+#introLine{font-size:clamp(20px,5.6vw,27px);line-height:1.35;max-width:26ch;min-height:8.2em;display:flex;align-items:center;justify-content:center;color:#f3e6e8;font-weight:600}
+#introDots{display:flex;gap:6px;justify-content:center;margin:0 0 14px}
+#introDots i{width:22px;height:4px;border-radius:2px;background:#4a2a30}
+#introDots i.on{background:#ff3d4e}
+#introBtn{max-width:320px;display:none}
+@media (prefers-reduced-motion:reduce){#intro h1{animation:none}}
 /* écrans plein cadre */
 .full{display:none;position:fixed;inset:0;z-index:2000;text-align:center;overflow:auto}
 .full.on{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
@@ -215,7 +225,7 @@ button,input{font:inherit;color:inherit}
   <button id="btnJoin" class="btn ghost">Rejoindre avec le code</button>
   <p id="homeErr" class="err" role="alert"></p>
   <button id="btnRules" class="link">Comment ça marche ?</button>
-  <p class="mut" style="text-align:center;font-size:12px;margin:8px 0 0">Version 8</p>
+  <p class="mut" style="text-align:center;font-size:12px;margin:8px 0 0">Version 9</p>
 </div></section>
 
 <!-- LOBBY -->
@@ -268,6 +278,19 @@ button,input{font:inherit;color:inherit}
     </div>
   </div>
 </section>
+
+<!-- INTRO DIABOLIQUE -->
+<div id="intro" class="full" role="dialog" aria-live="polite">
+  <h1>Le cache‑cache<br>de l’extrême</h1>
+  <div>
+    <p id="introLine"></p>
+    <div id="introDots"></div>
+  </div>
+  <div style="width:100%;display:flex;flex-direction:column;align-items:center;gap:8px">
+    <button class="btn" id="introBtn">Je suis prêt</button>
+    <button class="link" id="introSkip">Passer</button>
+  </div>
+</div>
 
 <!-- TIRAGE DES RÔLES -->
 <div id="role" class="full" role="dialog" aria-live="polite">
@@ -335,10 +358,11 @@ button,input{font:inherit;color:inherit}
 <div id="rules" class="full" role="dialog">
   <div class="in">
     <h2>Les règles</h2>
-    <h3>Les équipes</h3><p>Au lancement, le tirage au sort répartit tout le monde en chercheurs et en cachés, à parts égales. De 2 joueurs à autant que vous êtes.</p>
+    <h3>Les équipes</h3><p>Au lancement, le tirage au sort répartit tout le monde en chercheurs et en cachés, dans un ratio de 40 % de chercheurs pour 60 % de cachés (14 joueurs : 5 chercheurs et 9 cachés). Il y a toujours au moins 1 chercheur. De 2 joueurs à autant que vous êtes.</p>
     <h3>La zone</h3><p>La partie démarre dans un cercle de 400 m. Toutes les 5 minutes, il se ferme et se décale : 250, 150, 100, puis 50 m. Hors du cercle, tu es dans le gaz violet : reviens vite.</p>
     <h3>Le ping</h3><p>Toutes les 3 minutes, les chercheurs voient les cachés sur la carte pendant 5 secondes. Pendant ce temps, la sirène retentit sur les téléphones des cachés.</p>
     <h3>La tempête</h3><p>Un caché hors de la zone est visible en direct par les chercheurs tant qu'il reste dans le gaz. Quand il rentre dans la zone, il reste visible 10 secondes de plus. Se cacher dans la tempête ne marche pas.</p>
+    <h3>Couper le réseau</h3><p>Un caché qui coupe son signal (mode avion, appli fermée) reste affiché à sa dernière position connue pour les chercheurs. À son retour en ligne, il prend 10 secondes de pénalité.</p>
     <h3>Les alertes</h3><p>À moins de 50 m d'un adversaire, ton téléphone te prévient tous les 10 m, jusqu'à 0 m.</p>
     <h3>Quand on te trouve</h3><p>Un chercheur qui t'a trouvé touche ton nom dans l'appli. Ton téléphone sonne et te demande : « Avez-vous vraiment été trouvé par lui ? ». Tu réponds Oui ou Non. Si tu réponds Oui, tu es éliminé.</p>
     <h3>Parler aux autres</h3><p>Touche « 🎙 Talkie-walkie » en bas de l'écran et choisis un joueur. Il reçoit « Benjamin veut te parler » et répond Oui ou Non. S'il accepte, maintiens le gros bouton pour parler et relâche pour écouter, comme un talkie-walkie. Il t'entend avec 1 seconde de retard environ.</p>
@@ -361,6 +385,8 @@ const FIREBASE_CONFIG = {
 };
 
 // ===== RÉGLAGES DU JEU (modifiables) =====
+const SEEKER_RATIO = 0.4;                  // 40 % de chercheurs, 60 % de cachés
+const nSeekers = n => Math.max(1, Math.floor(n*SEEKER_RATIO));
 const MIN_PLAYERS  = 2;                    // pas de maximum
 const HIDE_DELAY   = 120000;               // temps pour se cacher (ms)
 const RADII        = [400,250,150,100,50]; // rayons successifs de la zone (m)
@@ -527,7 +553,7 @@ $('#btnShare').onclick = async () => {
 };
 function renderLobby(){
   $('#lobCode').innerHTML = [...me.code].map(c=>`<b>${esc(c)}</b>`).join('');
-  const ps = players(), N = ps.length, S = Math.floor(N/2), H = N-S;
+  const ps = players(), N = ps.length, S = nSeekers(N), H = N-S;
   $('#lobCount').textContent = N+' joueur'+(N>1?'s':'');
   $('#lobPlayers').innerHTML = ps.map(p=>`<div class="who">${avatar(p.name)}<span class="n">${esc(p.name)}${p.id===me.pid?' (toi)':''}</span>${p.id===game.hostId?'<span class="crown">hôte</span>':''}</div>`).join('');
   $('#lobSplit').innerHTML = N>=MIN_PLAYERS ? `<div class="s"><b>${S}</b>chercheur${S>1?'s':''}</div><div class="h"><b>${H}</b>caché${H>1?'s':''}</div>` : '';
@@ -547,7 +573,7 @@ $('#btnStart').onclick = async () => {
     for(let k=1;k<RADII.length;k++) centers.push(randPoint(centers[k-1], RADII[k-1]-RADII[k]));
     const last = RADII.length-1;
     const target = randPoint(centers[last], RADII[last]-TARGET_RADIUS-5);
-    const ids = shuffle(players().map(p=>p.id)), nS = Math.floor(ids.length/2);
+    const ids = shuffle(players().map(p=>p.id)), nS = nSeekers(ids.length);
     const upd = {status:'running',speed,radii:RADII,centers,stageEvery:STAGE_MS,closeTime:CLOSE_MS,pingEvery:PING_MS,pingLen:PING_LEN,
       targetAt:Math.max(0,RADII.indexOf(TARGET_AT_R))*STAGE_MS, endAt:last*STAGE_MS+OVERTIME, target, startAt: now()+HIDE_DELAY};
     ids.forEach((id,i)=>{ upd['players/'+id+'/team']= i<nS?'seeker':'hider'; upd['players/'+id+'/caught']=false; });
@@ -567,11 +593,59 @@ function paintRole(t, final){
   $('#roleBtn').style.display = final ? 'block' : 'none';
   $('#roleKick').textContent = final ? 'Ton rôle' : 'Tirage au sort';
 }
+// ---------- intro diabolique ----------
+const INTRO = [
+  'Bienvenue dans le cache-cache de l’extrême.',
+  'Ici, personne ne joue pour rire. Vos téléphones vous suivent. Il n’y a aucune échappatoire.',
+  'Les équipes viennent d’être tirées au sort. Les chercheurs d’un côté. Les cachés de l’autre.',
+  'Les cachés ont '+(HIDE_DELAY/60000)+' minutes pour disparaître. Les chercheurs attendent. Et ils ont faim.',
+  'La zone se referme toutes les cinq minutes. Quatre cents mètres. Puis deux cent cinquante. Cent cinquante. Cent. Et cinquante.',
+  'Celui qui reste dans la tempête sera vu en direct. Et quand il en sort, dix secondes de honte en plus.',
+  'Toutes les trois minutes, la sirène hurle. Les chercheurs voient les cachés pendant cinq secondes.',
+  'Quand un chercheur te trouve, tu dois l’avouer. Et un caché qui détruit le point de destruction, remporte la partie.',
+  'Que le meilleur gagne. Ou que le plus lâche se fasse attraper. Bonne chance. Vous allez en avoir besoin. Ha. Ha. Ha.'
+];
+function genDrone(){
+  const rate=8000, n=rate*6, a=new Float32Array(n);
+  for(let i=0;i<n;i++){ const t=i/rate; a[i]=0.22*(1+0.35*Math.sin(2*Math.PI*0.5*t))*(Math.sin(2*Math.PI*55*t)+0.55*Math.sin(2*Math.PI*82.5*t)+0.25*Math.sin(2*Math.PI*110*t))/1.8; }
+  return makeWav(a,rate);
+}
+let droneA=null, introOn=false, introTimer=null, introFb=null;
+function pickVoice(){ try{ const v=speechSynthesis.getVoices().filter(x=>/^fr/i.test(x.lang)); return v.find(x=>/thomas|daniel|henri|paul|male|homme/i.test(x.name))||v[0]; }catch(e){ return null; } }
+function introFinish(){
+  introOn=false; clearTimeout(introTimer); clearTimeout(introFb); try{ speechSynthesis.cancel(); }catch(e){}
+  if(droneA){ try{ droneA.pause(); }catch(e){} }
+  $('#introBtn').style.display='block'; $('#introSkip').style.display='none';
+  $('#introLine').textContent='À toi de jouer.';
+  document.querySelectorAll('#introDots i').forEach(d=>d.classList.add('on'));
+}
+function startIntro(key){
+  introOn=true; const el=$('#intro'); el.classList.add('on');
+  $('#introBtn').style.display='none'; $('#introSkip').style.display='';
+  $('#introDots').innerHTML = INTRO.map(()=>'<i></i>').join('');
+  try{ if(!droneA){ droneA=new Audio(genDrone()); droneA.loop=true; droneA.volume=.5; } droneA.currentTime=0; droneA.play().catch(()=>{}); }catch(e){}
+  let i=0;
+  const next=()=>{
+    if(!introOn) return;
+    if(i>=INTRO.length){ introFinish(); return; }
+    const line=INTRO[i]; $('#introLine').textContent=line;
+    document.querySelectorAll('#introDots i').forEach((d,k)=>d.classList.toggle('on',k<=i)); i++;
+    let done=false;
+    const go=()=>{ if(done||!introOn) return; done=true; clearTimeout(introFb); clearTimeout(introTimer); introTimer=setTimeout(next,900); };
+    introFb=setTimeout(go, line.length*105+2500);
+    try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(line); u.lang='fr-FR'; u.pitch=.1; u.rate=.78; u.volume=1; const v=pickVoice(); if(v) u.voice=v; u.onend=go; speechSynthesis.speak(u); }catch(e){}
+  };
+  setTimeout(next,600);
+  $('#introSkip').onclick = introFinish;
+  $('#introBtn').onclick = () => { try{localStorage.setItem(key,'1');}catch(e){} el.classList.remove('on'); maybeRole(); };
+}
 function maybeRole(){
   const mine = game.players[me.pid]; if(!mine||!mine.team) return;
   const key = 'cc_role_'+me.code;
   let seen=false; try{ seen = !!localStorage.getItem(key); }catch(e){}
   if(seen || $('#role').classList.contains('on')) return;
+  const ik='cc_intro_'+me.code; let iSeen=false; try{ iSeen=!!localStorage.getItem(ik); }catch(e){}
+  if(!iSeen){ if(!$('#intro').classList.contains('on')) startIntro(ik); return; }
   $('#role').classList.add('on'); let i=0;
   paintRole('hider',false);
   roleTimer=setInterval(()=>paintRole(i++%2?'hider':'seeker',false),110);
@@ -879,11 +953,17 @@ function pushLive(force){
 }
 function pinIcon(p){ return L.divIcon({className:'',html:`<div class="pin">${esc((p.name||'?')[0].toUpperCase())}</div>`,iconSize:[34,34]}); }
 function clearMarkers(){ Object.keys(markers).forEach(id=>{ map.removeLayer(markers[id]); delete markers[id]; }); }
-function showHiders(pingOn){
-  const t=now(); let storm=0, pen=0;
+function showHiders(pingOn, el){
+  const t=now(); let storm=0, pen=0, lost=0;
   players().forEach(p=>{
     if(p.team!=='hider'||p.caught){ dropMarker(p.id); return; }
-    const l=live[p.id]; if(!l||t-l.t>30000){ dropMarker(p.id); return; }
+    const l=live[p.id]; if(!l){ dropMarker(p.id); return; }
+    if(t-l.t>30000){
+      if(el<0){ dropMarker(p.id); return; }
+      lost++; const sec=Math.round((t-l.t)/1000), a=sec>=60?Math.floor(sec/60)+' min':sec+' s';
+      if(!markers[p.id]) markers[p.id]=L.marker([l.lat,l.lng],{icon:pinIcon(p),zIndexOffset:900}).addTo(map).bindTooltip('',{permanent:true,direction:'top',offset:[0,-20]});
+      markers[p.id].setLatLng([l.lat,l.lng]).setTooltipContent(esc(p.name)+' · signal perdu '+a); return;
+    }
     const inStorm=!!l.out, inPen=!inStorm && l.pen>t;
     if(!(pingOn||inStorm||inPen)){ dropMarker(p.id); return; }
     if(inStorm) storm++; else if(inPen) pen++;
@@ -892,7 +972,7 @@ function showHiders(pingOn){
     if(!markers[p.id]) markers[p.id]=L.marker(ll,{icon:pinIcon(p),zIndexOffset:900}).addTo(map).bindTooltip('',{permanent:true,direction:'top',offset:[0,-20]});
     markers[p.id].setLatLng(ll).setTooltipContent(esc(p.name)+tag+' · '+age+' s');
   });
-  return {storm,pen};
+  return {storm,pen,lost};
 }
 function dropMarker(id){ if(markers[id]){ map.removeLayer(markers[id]); delete markers[id]; } }
 
@@ -923,6 +1003,16 @@ function proximity(el, mine){
     showProx(level, who, 'Vous êtes à '+level+' mètre'+(level>1?'s':'')+' d’'+(mine.team==='hider'?'un chercheur':'un caché'));
   }
 }
+
+let offAt=0;
+window.addEventListener('offline',()=>{ offAt=Date.now(); });
+window.addEventListener('online',()=>{
+  if(offAt && Date.now()-offAt>5000 && game && game.status==='running' && me && game.players[me.pid]){
+    const m=game.players[me.pid];
+    if(m.team==='hider'&&!m.caught&&elapsed()>=0){ hPen=now()+PENALTY_MS; pushLive(true); }
+  }
+  offAt=0;
+});
 
 function tick(){
   if(!game||!me||game.status!=='running'||!map) return;
@@ -974,8 +1064,8 @@ function tick(){
     if(isHider && !mine.caught){ pushLive(true); playSiren(); try{navigator.vibrate&&navigator.vibrate([500,200,500,200,500]);}catch(e){} }
     else if(!isHider) playBeep();
   }
-  let seen={storm:0,pen:0};
-  if(!isHider) seen=showHiders(pingActive); else clearMarkers();
+  let seen={storm:0,pen:0,lost:0};
+  if(!isHider) seen=showHiders(pingActive,el); else clearMarkers();
 
   proximity(el, mine);
 
@@ -997,7 +1087,7 @@ function tick(){
     msg='Tempête : les chercheurs te voient en direct. Reviens dans la zone.'; cls='on bad';
     if(Date.now()-lastVibe>15000){ lastVibe=Date.now(); try{navigator.vibrate&&navigator.vibrate([300,100,300]);}catch(e){} }
   }
-  else if(!isHider && (seen.storm||seen.pen)){ msg = seen.storm ? 'Un caché est dans la tempête : position en direct.' : 'Un caché sort de la tempête : visible quelques secondes.'; cls='on'; }
+  else if(!isHider && (seen.storm||seen.pen||seen.lost)){ msg = seen.lost&&!seen.storm&&!seen.pen ? 'Un caché a perdu le signal : dernière position affichée.' : seen.storm ? 'Un caché est dans la tempête : position en direct.' : 'Un caché sort de la tempête : visible quelques secondes.'; cls='on'; }
   else if(out && mine.team && !mine.caught){
     msg='Tu es hors de la zone. Reviens dans le cercle.'; cls='on bad';
     if(Date.now()-lastVibe>15000){ lastVibe=Date.now(); try{navigator.vibrate&&navigator.vibrate([300,100,300]);}catch(e){} }

@@ -68,7 +68,7 @@ button.mini{width:auto;padding:4px 10px;margin:0;font-size:13px}
 
 <div id="home" class="screen">
   <h1>🕵️ Cache-cache GPS</h1>
-  <p class="sub">4 chercheurs · 4 cachés · zone qui rétrécit</p>
+  <p class="sub">4 chercheurs · 4 cachés · zone qui rétrécit · v2</p>
   <input id="name" placeholder="Ton prénom" maxlength="14" autocomplete="off">
   <button id="btnCreate">Créer une partie</button>
   <div class="or">ou</div>
@@ -108,7 +108,7 @@ button.mini{width:auto;padding:4px 10px;margin:0;font-size:13px}
   <div id="banner"></div>
   <div id="prox"></div>
   <div id="bottom">
-    <div class="head"><span id="gpsState">GPS…</span><span id="myRole"></span></div>
+    <div class="head"><span id="gpsState">GPS…</span><span><span id="myRole"></span> <button class="mini sec" id="btnQuit">Quitter</button></span></div>
     <div id="actions"></div>
     <div id="gamePlayers"></div>
   </div>
@@ -261,6 +261,7 @@ function leave(silent){
   me=null; game=null; saveMe(); show('home');
 }
 $('#btnLeave').onclick = () => leave(false);
+$('#btnQuit').onclick = () => { leave(true); location.reload(); };
 $('#btnEndLeave').onclick = () => { $('#end').classList.remove('on'); leave(true); location.reload(); };
 
 // ---------- lobby ----------
@@ -329,6 +330,7 @@ function updateMe(){
 function render(){
   if(!me||!game){ show('home'); return; }
   if(!game.players || !game.players[me.pid]){ leave(true); return; }
+  if(game.status!=='lobby' && !game.centers){ leave(true); $('#homeErr').textContent='Partie créée avec une ancienne version. Recharge la page puis crée une nouvelle partie.'; return; }
   if(game.status==='lobby'){ show('lobby'); renderLobby(); return; }
   show('game'); ensureMap(); if(!awake){ awake=true; keepAwake(); } updateMe(); renderPlayers();
   if(game.status==='ended') showEnd();

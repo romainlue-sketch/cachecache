@@ -215,7 +215,7 @@ button,input{font:inherit;color:inherit}
   <button id="btnJoin" class="btn ghost">Rejoindre avec le code</button>
   <p id="homeErr" class="err" role="alert"></p>
   <button id="btnRules" class="link">Comment ça marche ?</button>
-  <p class="mut" style="text-align:center;font-size:12px;margin:8px 0 0">Version 7</p>
+  <p class="mut" style="text-align:center;font-size:12px;margin:8px 0 0">Version 8</p>
 </div></section>
 
 <!-- LOBBY -->
@@ -338,6 +338,7 @@ button,input{font:inherit;color:inherit}
     <h3>Les équipes</h3><p>Au lancement, le tirage au sort répartit tout le monde en chercheurs et en cachés, à parts égales. De 2 joueurs à autant que vous êtes.</p>
     <h3>La zone</h3><p>La partie démarre dans un cercle de 400 m. Toutes les 5 minutes, il se ferme et se décale : 250, 150, 100, puis 50 m. Hors du cercle, tu es dans le gaz violet : reviens vite.</p>
     <h3>Le ping</h3><p>Toutes les 3 minutes, les chercheurs voient les cachés sur la carte pendant 5 secondes. Pendant ce temps, la sirène retentit sur les téléphones des cachés.</p>
+    <h3>La tempête</h3><p>Un caché hors de la zone est visible en direct par les chercheurs tant qu'il reste dans le gaz. Quand il rentre dans la zone, il reste visible 10 secondes de plus. Se cacher dans la tempête ne marche pas.</p>
     <h3>Les alertes</h3><p>À moins de 50 m d'un adversaire, ton téléphone te prévient tous les 10 m, jusqu'à 0 m.</p>
     <h3>Quand on te trouve</h3><p>Un chercheur qui t'a trouvé touche ton nom dans l'appli. Ton téléphone sonne et te demande : « Avez-vous vraiment été trouvé par lui ? ». Tu réponds Oui ou Non. Si tu réponds Oui, tu es éliminé.</p>
     <h3>Parler aux autres</h3><p>Touche « 🎙 Talkie-walkie » en bas de l'écran et choisis un joueur. Il reçoit « Benjamin veut te parler » et répond Oui ou Non. S'il accepte, maintiens le gros bouton pour parler et relâche pour écouter, comme un talkie-walkie. Il t'entend avec 1 seconde de retard environ.</p>
@@ -366,6 +367,7 @@ const RADII        = [400,250,150,100,50]; // rayons successifs de la zone (m)
 const STAGE_MS     = 300000;               // un cran de zone toutes les 5 min
 const CLOSE_MS     = 60000;                // durée de fermeture à chaque cran
 const PING_MS      = 180000;               // ping des cachés toutes les 3 min
+const PENALTY_MS   = 10000;                // pénalité après la tempête (10 s)
 const PING_LEN     = 5000;                 // durée du ping (5 s)
 const OVERTIME     = 600000;               // temps restant après le dernier cercle
 const TARGET_RADIUS= 20;                   // rayon de la zone de destruction (m)
@@ -394,7 +396,7 @@ const now = () => Date.now() + offset;
 let me = null, game = null, gref = null, lref = null, live = {}, lastFix = null, gpsId = null;
 let map = null, zoneC = null, nextC = null, gasP = null, meM = null, tgtM = null, tgtC = null;
 const markers = {};
-let lastVibe = 0, wakeLock = null, awake = false, lastLive = 0, pingDone = -1, lastLevel = 99, proxTimer = null, roleTimer = null, tileErrs = 0;
+let lastVibe = 0, wakeLock = null, awake = false, lastLive = 0, hOut = false, hPen = 0, pingDone = -1, lastLevel = 99, proxTimer = null, roleTimer = null, tileErrs = 0;
 try { me = JSON.parse(localStorage.getItem('cc_me') || 'null'); } catch(e){}
 const saveMe = () => { try { me ? localStorage.setItem('cc_me', JSON.stringify(me)) : localStorage.removeItem('cc_me'); } catch(e){} };
 
@@ -873,20 +875,26 @@ function showEnd(){
 function pushLive(force){
   if(!lastFix||!lref||!me) return;
   const t=Date.now(); if(!force && t-lastLive<3000) return; lastLive=t;
-  lref.child(me.pid).set({lat:lastFix.lat,lng:lastFix.lng,t:now()});
+  lref.child(me.pid).set({lat:lastFix.lat,lng:lastFix.lng,t:now(),out:hOut?1:0,pen:hPen||0});
 }
 function pinIcon(p){ return L.divIcon({className:'',html:`<div class="pin">${esc((p.name||'?')[0].toUpperCase())}</div>`,iconSize:[34,34]}); }
 function clearMarkers(){ Object.keys(markers).forEach(id=>{ map.removeLayer(markers[id]); delete markers[id]; }); }
-function showHiders(){
-  const t=now();
+function showHiders(pingOn){
+  const t=now(); let storm=0, pen=0;
   players().forEach(p=>{
-    if(p.team!=='hider'||p.caught) return;
-    const l=live[p.id]; if(!l||t-l.t>30000) return;
+    if(p.team!=='hider'||p.caught){ dropMarker(p.id); return; }
+    const l=live[p.id]; if(!l||t-l.t>30000){ dropMarker(p.id); return; }
+    const inStorm=!!l.out, inPen=!inStorm && l.pen>t;
+    if(!(pingOn||inStorm||inPen)){ dropMarker(p.id); return; }
+    if(inStorm) storm++; else if(inPen) pen++;
     const ll=[l.lat,l.lng], age=Math.max(0,Math.round((t-l.t)/1000));
+    const tag = inStorm?' · tempête':inPen?' · pénalité':'';
     if(!markers[p.id]) markers[p.id]=L.marker(ll,{icon:pinIcon(p),zIndexOffset:900}).addTo(map).bindTooltip('',{permanent:true,direction:'top',offset:[0,-20]});
-    markers[p.id].setLatLng(ll).setTooltipContent(esc(p.name)+' · '+age+' s');
+    markers[p.id].setLatLng(ll).setTooltipContent(esc(p.name)+tag+' · '+age+' s');
   });
+  return {storm,pen};
 }
+function dropMarker(id){ if(markers[id]){ map.removeLayer(markers[id]); delete markers[id]; } }
 
 // alertes de proximité
 function showProx(level, who, text){
@@ -950,14 +958,24 @@ function tick(){
     tgtC=L.circle(tl,{radius:TARGET_RADIUS,color:'#ff3d6e',weight:2,fillOpacity:.2,interactive:false}).addTo(map);
   }
 
+  // tempête : un caché hors zone est visible en continu, puis 10 s après son retour
+  const outNow = lastFix ? (z.R-dist(lastFix,z.c))<0 : hOut;
+  let chg=false;
+  if(isHider && !mine.caught && el>=0){
+    if(outNow && !hOut){ hOut=true; hPen=0; chg=true; playSiren(); try{navigator.vibrate&&navigator.vibrate([500,200,500]);}catch(e){} }
+    else if(!outNow && hOut){ hOut=false; hPen=now()+PENALTY_MS; chg=true; }
+  } else if(hOut||hPen){ hOut=false; hPen=0; chg=true; }
+  const penLeft = hPen>now() ? Math.ceil((hPen-now())/1000) : 0;
+
   // position live + ping
-  pushLive(false);
+  pushLive(chg);
   if(pingActive && pingDone!==pk){
     pingDone=pk;
     if(isHider && !mine.caught){ pushLive(true); playSiren(); try{navigator.vibrate&&navigator.vibrate([500,200,500,200,500]);}catch(e){} }
     else if(!isHider) playBeep();
   }
-  if(pingActive && !isHider) showHiders(); else clearMarkers();
+  let seen={storm:0,pen:0};
+  if(!isHider) seen=showHiders(pingActive); else clearMarkers();
 
   proximity(el, mine);
 
@@ -968,12 +986,18 @@ function tick(){
     const ei=$('#edgeInfo'); ei.className='edge'+(out?' bad':'');
     ei.innerHTML = out ? `<b>Hors zone de ${Math.round(-edge)} m</b>` : `<span class="mut">Bord de zone à</span> <b>${Math.round(edge)} m</b>`;
   }
-  const vig=$('#vig'); vig.className = pingActive&&isHider ? 'ping' : (out&&el>=0&&!mine.caught ? 'out' : '');
+  const vig=$('#vig'); vig.className = (pingActive||penLeft>0)&&isHider ? 'ping' : (out&&el>=0&&!mine.caught ? 'out' : '');
 
   // bandeau
   const b=$('#banner'); let msg='', cls='';
   if(el<0){ msg = isHider ? 'Cache-toi. Les chercheurs attendent.' : 'Patiente : les cachés se cachent.'; cls='on'; }
   else if(pingActive){ msg = isHider ? 'Tu es repéré. Bouge !' : 'Les cachés sont visibles pendant 5 s.'; cls='on bad'; }
+  else if(isHider && penLeft>0 && !mine.caught){ msg='Pénalité : tu restes visible encore '+penLeft+' s.'; cls='on bad'; }
+  else if(isHider && out && !mine.caught){
+    msg='Tempête : les chercheurs te voient en direct. Reviens dans la zone.'; cls='on bad';
+    if(Date.now()-lastVibe>15000){ lastVibe=Date.now(); try{navigator.vibrate&&navigator.vibrate([300,100,300]);}catch(e){} }
+  }
+  else if(!isHider && (seen.storm||seen.pen)){ msg = seen.storm ? 'Un caché est dans la tempête : position en direct.' : 'Un caché sort de la tempête : visible quelques secondes.'; cls='on'; }
   else if(out && mine.team && !mine.caught){
     msg='Tu es hors de la zone. Reviens dans le cercle.'; cls='on bad';
     if(Date.now()-lastVibe>15000){ lastVibe=Date.now(); try{navigator.vibrate&&navigator.vibrate([300,100,300]);}catch(e){} }

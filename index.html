@@ -43,6 +43,8 @@ ol li{margin:6px 0}
 .me{width:18px;height:18px;border-radius:50%;background:#22d3a0;border:3px solid #fff;box-shadow:0 0 0 6px rgba(34,211,160,.3)}
 .tgt{font-size:30px}
 .leaflet-tooltip{font-size:12px}
+#prox{position:absolute;z-index:600;left:8px;right:8px;top:calc(max(8px,env(safe-area-inset-top)) + 120px);display:none;background:#b91c1c;color:#fff;font-weight:800;font-size:22px;text-align:center;border-radius:14px;padding:14px;box-shadow:0 4px 20px rgba(0,0,0,.6)}
+#prox.on{display:block}
 #end{background:rgba(0,0,0,.85);z-index:2000;text-align:center;padding-top:25vh}
 #end .big{font-size:34px;font-weight:800;margin:8px 0}
 button.mini{width:auto;padding:4px 10px;margin:0;font-size:13px}
@@ -86,12 +88,12 @@ button.mini{width:auto;padding:4px 10px;margin:0;font-size:13px}
   <div class="card" id="lobPlayers"></div>
   <div class="card" id="hostBox" style="display:none">
     <h2 style="margin-top:0">Réglages (hôte)</h2>
-    <label>Rayon de départ (m)</label>
-    <input id="r0" type="number" value="800" min="100" step="50" inputmode="numeric">
+    <p class="sub" style="margin:0 0 8px">Zones : 500 → 250 → 150 → 100 → 50 m, un cran toutes les 5 min.<br>Ping : toutes les 3 min, les chercheurs voient les cachés 5 s (sirène chez les cachés).<br>Alertes de proximité à moins de 50 m.</p>
     <label><input type="checkbox" id="testmode">Mode test (temps ×10)</label>
-    <p class="sub" style="margin:6px 0">Le centre de la zone = ta position actuelle. Les cachés ont 2 min pour se cacher.</p>
+    <p class="sub" style="margin:6px 0">Le centre de départ = ta position actuelle. Les cachés ont 2 min pour se cacher.</p>
     <button id="btnStart">Lancer la partie</button>
   </div>
+  <button class="sec" id="btnSound">🔊 Tester le son (sirène)</button>
   <p id="lobMsg" class="sub"></p>
   <button class="sec" id="btnLeave">Quitter</button>
 </div>
@@ -100,10 +102,11 @@ button.mini{width:auto;padding:4px 10px;margin:0;font-size:13px}
   <div id="map"></div>
   <div id="hud">
     <div class="chip"><small id="h1l">Zone</small><b id="h1">--</b></div>
-    <div class="chip"><small>Prochain relevé</small><b id="h2">--</b></div>
+    <div class="chip"><small id="h2l">Ping cachés</small><b id="h2">--</b></div>
     <div class="chip"><small id="h3l">Destruction</small><b id="h3">--</b></div>
   </div>
   <div id="banner"></div>
+  <div id="prox"></div>
   <div id="bottom">
     <div class="head"><span id="gpsState">GPS…</span><span id="myRole"></span></div>
     <div id="actions"></div>
@@ -121,7 +124,6 @@ button.mini{width:auto;padding:4px 10px;margin:0;font-size:13px}
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script>
-// ====== COLLE ICI TA CONFIG FIREBASE ======
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyDF--SCWo_FPSkNHuJPICJADxekOgjbiHk",
   authDomain: "cache-cache-2c9d1.firebaseapp.com",
@@ -129,15 +131,26 @@ const FIREBASE_CONFIG = {
   projectId: "cache-cache-2c9d1",
   appId: "1:432721301411:web:3dadd425b01bd44ecd5416"
 };
-// ==========================================
 
-const MAX_PER_TEAM = 4, HIDE_DELAY = 120000, TARGET_RADIUS = 30;
+// ===== RÉGLAGES DU JEU (modifiables) =====
+const MAX_PER_TEAM = 4;
+const HIDE_DELAY   = 120000;               // temps pour se cacher (ms)
+const RADII        = [500,250,150,100,50]; // rayons successifs de la zone (m)
+const STAGE_MS     = 300000;               // un cran de zone toutes les 5 min
+const CLOSE_MS     = 60000;                // durée de fermeture de la zone à chaque cran
+const PING_MS      = 180000;               // ping des cachés toutes les 3 min
+const PING_LEN     = 5000;                 // durée du ping (5 s)
+const OVERTIME     = 600000;               // temps restant après la zone finale
+const TARGET_RADIUS= 20;                   // rayon de la zone de destruction (m)
+const TARGET_AT_R  = 100;                  // la zone de destruction apparaît quand la zone atteint ce rayon
+const PROX_HIDERS  = true;                 // alertes de proximité pour les cachés
+const PROX_SEEKERS = true;                 // alertes de proximité pour les chercheurs
+// =========================================
+
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = ms => { ms = Math.max(0, Math.round(ms/1000)); return String(Math.floor(ms/60)).padStart(2,'0')+':'+String(ms%60).padStart(2,'0'); };
 function show(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on', s.id===id)); }
-
-if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.startsWith('COLLE')) { show('setup'); throw new Error('Firebase non configuré'); }
 
 firebase.initializeApp(FIREBASE_CONFIG);
 const db = firebase.database();
@@ -145,16 +158,56 @@ let offset = 0;
 db.ref('.info/serverTimeOffset').on('value', s => offset = s.val() || 0);
 const now = () => Date.now() + offset;
 
-let me = null, game = null, gref = null, lastFix = null, gpsId = null;
+let me = null, game = null, gref = null, lref = null, live = {}, lastFix = null, gpsId = null;
 let map = null, zoneC = null, nextC = null, meM = null, tgtM = null, tgtC = null;
 const markers = {};
-let uploadedTick = 0, lastVibe = 0, wakeLock = null;
+let lastVibe = 0, wakeLock = null, awake = false, lastLive = 0, pingDone = -1, lastLevel = 99, proxTimer = null;
 try { me = JSON.parse(localStorage.getItem('cc_me') || 'null'); } catch(e){}
 const saveMe = () => { try { me ? localStorage.setItem('cc_me', JSON.stringify(me)) : localStorage.removeItem('cc_me'); } catch(e){} };
+
+// ---------- sons ----------
+function makeWav(samples, rate){
+  const n = samples.length, buf = new ArrayBuffer(44+n*2), v = new DataView(buf);
+  const w = (o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  w(0,'RIFF'); v.setUint32(4,36+n*2,true); w(8,'WAVE'); w(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,rate,true); v.setUint32(28,rate*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); w(36,'data'); v.setUint32(40,n*2,true);
+  for(let i=0;i<n;i++) v.setInt16(44+i*2, Math.max(-1,Math.min(1,samples[i]))*32767, true);
+  return URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
+}
+function genSiren(sec){ // sirène d'alerte : fréquence qui monte et descend
+  const rate=22050, n=Math.floor(rate*sec), s=new Float32Array(n); let ph=0;
+  for(let i=0;i<n;i++){
+    const t=i/rate, f=650+250*Math.sin(2*Math.PI*t/2.5-Math.PI/2);
+    ph += 2*Math.PI*f/rate;
+    const env=Math.min(1,t/0.15,(sec-t)/0.15);
+    s[i]=0.9*env*(0.6*Math.sin(ph)+0.25*Math.sin(2*ph)+0.12*Math.sin(3*ph));
+  }
+  return makeWav(s,rate);
+}
+function genBeep(){
+  const rate=22050, n=Math.floor(rate*0.22), s=new Float32Array(n);
+  for(let i=0;i<n;i++){ const t=i/rate; s[i]=0.8*Math.min(1,t/0.01,(0.22-t)/0.03)*Math.sin(2*Math.PI*1000*t); }
+  return makeWav(s,rate);
+}
+const sirenA = new Audio(genSiren(5)), beepA = new Audio(genBeep());
+sirenA.preload = beepA.preload = 'auto';
+let audioReady = false;
+function unlockAudio(){
+  if(audioReady) return; audioReady = true;
+  [sirenA,beepA].forEach(a=>{ try{ a.muted=true; const p=a.play(); if(p&&p.then) p.then(()=>{a.pause();a.currentTime=0;a.muted=false;}).catch(()=>{a.muted=false;audioReady=false;}); }catch(e){ a.muted=false; audioReady=false; } });
+  try{ speechSynthesis.speak(new SpeechSynthesisUtterance('')); }catch(e){}
+}
+document.addEventListener('pointerdown', unlockAudio, {passive:true});
+document.addEventListener('touchend', unlockAudio, {passive:true});
+function playSiren(){ try{ sirenA.currentTime=0; sirenA.play().catch(()=>{}); }catch(e){} }
+function playBeep(){ try{ beepA.currentTime=0; beepA.play().catch(()=>{}); }catch(e){} }
+function speak(t){ try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(t); u.lang='fr-FR'; u.rate=1.05; speechSynthesis.speak(u); }catch(e){} }
+$('#btnSound').onclick = () => { unlockAudio(); playSiren(); setTimeout(()=>{ try{sirenA.pause();sirenA.currentTime=0;}catch(e){} },2500); };
 
 // ---------- géométrie ----------
 function dist(a,b){const R=6371000,t=Math.PI/180,dLa=(b.lat-a.lat)*t,dLo=(b.lng-a.lng)*t;const x=Math.sin(dLa/2)**2+Math.cos(a.lat*t)*Math.cos(b.lat*t)*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
 function randPoint(c,rad){const r=rad*Math.sqrt(Math.random()),a=Math.random()*2*Math.PI;return{lat:c.lat+r*Math.cos(a)/111320,lng:c.lng+r*Math.sin(a)/(111320*Math.cos(c.lat*Math.PI/180))};}
+const lerp = (a,b,f) => a+(b-a)*f;
 const getPos = () => new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(p=>res({lat:p.coords.latitude,lng:p.coords.longitude}),rej,{enableHighAccuracy:true,timeout:15000}));
 
 // ---------- GPS ----------
@@ -165,7 +218,7 @@ function startGps(){
   gpsId = navigator.geolocation.watchPosition(p=>{
     lastFix = {lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy};
     setGps('GPS ±'+Math.round(p.coords.accuracy)+' m'); updateMe();
-  }, ()=>setGps('⚠ GPS refusé ou indisponible'), {enableHighAccuracy:true,maximumAge:2000,timeout:20000});
+  }, ()=>setGps('⚠ GPS refusé ou indisponible'), {enableHighAccuracy:true,maximumAge:1000,timeout:20000});
 }
 async function keepAwake(){ try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden && game && game.status==='running') keepAwake(); });
@@ -175,12 +228,14 @@ function genCode(){ const c='ABCDEFGHJKMNPQRSTUVWXYZ'; return Array.from({length
 const rid = () => Math.random().toString(36).slice(2,10);
 
 $('#btnCreate').onclick = async () => {
+  unlockAudio();
   const name = $('#name').value.trim(); if(!name) return $('#homeErr').textContent='Entre ton prénom.';
   const code = genCode(), pid = rid();
   await db.ref('games/'+code).set({status:'lobby',hostId:pid,createdAt:firebase.database.ServerValue.TIMESTAMP,players:{[pid]:{name,team:'',caught:false}}});
   me = {pid,name,code}; saveMe(); attach();
 };
 $('#btnJoin').onclick = async () => {
+  unlockAudio();
   const name = $('#name').value.trim(), code = $('#code').value.trim().toUpperCase();
   if(!name) return $('#homeErr').textContent='Entre ton prénom.';
   if(code.length!==4) return $('#homeErr').textContent='Code à 4 lettres.';
@@ -193,13 +248,15 @@ $('#btnJoin').onclick = async () => {
   me = {pid,name,code}; saveMe(); attach();
 };
 function attach(){
-  if(gref) gref.off();
+  if(gref) gref.off(); if(lref) lref.off();
   gref = db.ref('games/'+me.code);
+  lref = db.ref('games/'+me.code+'_live');
   startGps();
+  lref.on('value', s => { live = s.val() || {}; });
   gref.on('value', s => { game = s.val(); if(!game){ leave(true); return; } render(); });
 }
 function leave(silent){
-  if(gref){ gref.off(); gref=null; }
+  if(gref){ gref.off(); gref=null; } if(lref){ lref.off(); lref=null; }
   if(me && game && game.status==='lobby' && !silent) db.ref(`games/${me.code}/players/${me.pid}`).remove();
   me=null; game=null; saveMe(); show('home');
 }
@@ -231,28 +288,35 @@ $('#btnStart').onclick = async () => {
   $('#btnStart').disabled = true;
   try{
     const fix = lastFix || await getPos();
-    const r0 = Math.max(100, +$('#r0').value||800), speed = $('#testmode').checked?10:1;
-    const factor = 0.8, every = 360000, duration = 2700000;
-    const finalR = r0*Math.pow(factor, Math.floor(duration/every));
-    await gref.update({status:'running',center:{lat:fix.lat,lng:fix.lng},r0,speed,shrinkFactor:factor,shrinkEvery:every,revealEvery:300000,duration,overtime:600000,
-      target:randPoint(fix, finalR*0.7), startAt: now()+HIDE_DELAY});
+    const speed = $('#testmode').checked?10:1;
+    const centers = [{lat:fix.lat,lng:fix.lng}];
+    for(let k=1;k<RADII.length;k++) centers.push(randPoint(centers[k-1], RADII[k-1]-RADII[k])); // chaque zone reste dans la précédente
+    const last = RADII.length-1;
+    const target = randPoint(centers[last], RADII[last]-TARGET_RADIUS-5);
+    await gref.update({status:'running',speed,radii:RADII,centers,stageEvery:STAGE_MS,closeTime:CLOSE_MS,pingEvery:PING_MS,pingLen:PING_LEN,
+      targetAt:Math.max(0,RADII.indexOf(TARGET_AT_R))*STAGE_MS, endAt:last*STAGE_MS+OVERTIME, target, startAt: now()+HIDE_DELAY});
   }catch(e){ $('#lobMsg').textContent='Position introuvable : autorise le GPS.'; $('#btnStart').disabled=false; }
 };
 
 // ---------- jeu ----------
 const elapsed = () => { const r = now()-game.startAt; return r>=0 ? r*game.speed : r; };
-function zoneInfo(el){
-  const maxN = Math.floor(game.duration/game.shrinkEvery);
-  const n = Math.min(Math.floor(Math.max(el,0)/game.shrinkEvery), maxN);
-  return { n, maxN, R: game.r0*Math.pow(game.shrinkFactor,n), nextR: n<maxN ? game.r0*Math.pow(game.shrinkFactor,n+1) : null };
+function zoneAt(el){
+  const T=game.stageEvery, Rr=game.radii, C=game.centers, L=Rr.length-1;
+  const n=Math.min(Math.floor(Math.max(el,0)/T),L);
+  let c=C[n], R=Rr[n], closing=false;
+  if(n>=1 && el-n*T<game.closeTime){
+    const f=(el-n*T)/game.closeTime; closing=true;
+    c={lat:lerp(C[n-1].lat,C[n].lat,f),lng:lerp(C[n-1].lng,C[n].lng,f)}; R=lerp(Rr[n-1],Rr[n],f);
+  }
+  return { c, R, closing, n, L, next: n<L?{c:C[n+1],R:Rr[n+1]}:null, nextIn: n<L?(n+1)*T-el:null };
 }
 function ensureMap(){
   if(map) return;
-  const c = [game.center.lat, game.center.lng];
+  const c = [game.centers[0].lat, game.centers[0].lng];
   map = L.map('map',{zoomControl:false}).setView(c,16);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
-  zoneC = L.circle(c,{radius:game.r0,color:'#22d3a0',weight:3,fillOpacity:.06}).addTo(map);
-  nextC = L.circle(c,{radius:game.r0,color:'#f59e0b',weight:2,dashArray:'6 8',fill:false}).addTo(map);
+  zoneC = L.circle(c,{radius:game.radii[0],color:'#22d3a0',weight:3,fillOpacity:.06}).addTo(map);
+  nextC = L.circle(c,{radius:game.radii[1]||game.radii[0],color:'#f59e0b',weight:2,dashArray:'6 8',fill:false}).addTo(map);
   map.fitBounds(zoneC.getBounds(),{paddingBottomRight:[0,160]});
   setTimeout(()=>map.invalidateSize(),200);
 }
@@ -266,31 +330,19 @@ function render(){
   if(!me||!game){ show('home'); return; }
   if(!game.players || !game.players[me.pid]){ leave(true); return; }
   if(game.status==='lobby'){ show('lobby'); renderLobby(); return; }
-  show('game'); ensureMap(); keepAwake(); updateMe(); renderPlayers();
+  show('game'); ensureMap(); if(!awake){ awake=true; keepAwake(); } updateMe(); renderPlayers();
   if(game.status==='ended') showEnd();
 }
-function pinIcon(p){ const cls=p.caught?'caught':p.team; return L.divIcon({className:'',html:`<div class="pin ${cls}">${esc((p.name||'?')[0].toUpperCase())}</div>`,iconSize:[30,30]}); }
 function renderPlayers(){
-  const t = now();
   const mine = game.players[me.pid];
   $('#myRole').textContent = mine.team==='seeker'?'🔴 Chercheur':(mine.caught?'⚪ Trouvé':'🔵 Caché');
-  const rows = players().sort((a,b)=>a.team.localeCompare(b.team)).map(p=>{
-    const age = p.pos ? 'relevé il y a '+Math.floor((t-p.pos.t)/60000)+' min' : 'pas encore localisé';
+  $('#gamePlayers').innerHTML = players().sort((a,b)=>a.team.localeCompare(b.team)).map(p=>{
     const canCatch = p.team==='hider' && !p.caught && mine.team==='seeker' && game.status==='running';
-    return `<div class="pl"><span><span class="tag ${p.caught?'none':p.team}">${p.team==='seeker'?'C':'H'}</span> ${esc(p.name)}${p.id===me.pid?' (moi)':''}${p.caught?' — trouvé':''}<br><small style="color:var(--mut)">${age}</small></span>${canCatch?`<button class="mini red" data-catch="${p.id}">Trouvé</button>`:''}</div>`;
+    return `<div class="pl"><span><span class="tag ${p.caught?'none':p.team}">${p.team==='seeker'?'C':'H'}</span> ${esc(p.name)}${p.id===me.pid?' (moi)':''}${p.caught?' — trouvé':''}</span>${canCatch?`<button class="mini red" data-catch="${p.id}">Trouvé</button>`:''}</div>`;
   }).join('');
-  $('#gamePlayers').innerHTML = rows;
-  // marqueurs (relevés)
-  players().forEach(p=>{
-    if(p.id===me.pid || !p.pos) return;
-    const ll=[p.pos.lat,p.pos.lng], age=Math.floor((t-p.pos.t)/60000);
-    if(!markers[p.id]){ markers[p.id]=L.marker(ll,{icon:pinIcon(p)}).addTo(map).bindTooltip('',{permanent:true,direction:'top',offset:[0,-16]}); }
-    markers[p.id].setLatLng(ll).setIcon(pinIcon(p)).setTooltipContent(esc(p.name)+' · '+age+' min');
-  });
-  // actions
   let act='';
   if(mine.team==='hider' && !mine.caught && game.status==='running') act+=`<button class="sec" id="btnCaught">Je me suis fait trouver</button>`;
-  if(game.status==='running' && mine.team==='hider' && !mine.caught && lastFix && elapsed()>=game.duration && dist(lastFix,game.target)<=TARGET_RADIUS) act+=`<button class="red" id="btnDestroy">💥 Détruire le point</button>`;
+  if(game.status==='running' && mine.team==='hider' && !mine.caught && lastFix && elapsed()>=game.targetAt && dist(lastFix,game.target)<=TARGET_RADIUS) act+=`<button class="red" id="btnDestroy">💥 Détruire le point</button>`;
   if($('#actions').dataset.sig!==act){ $('#actions').innerHTML=act; $('#actions').dataset.sig=act; }
 }
 document.addEventListener('click',e=>{
@@ -306,43 +358,106 @@ function showEnd(){
   $('#end').classList.add('on');
 }
 
+// position live (sert au ping et aux alertes de proximité ; l'affichage reste limité par les règles du jeu)
+function pushLive(force){
+  if(!lastFix||!lref||!me) return;
+  const t=Date.now(); if(!force && t-lastLive<3000) return; lastLive=t;
+  lref.child(me.pid).set({lat:lastFix.lat,lng:lastFix.lng,t:now()});
+}
+function pinIcon(p){ return L.divIcon({className:'',html:`<div class="pin hider">${esc((p.name||'?')[0].toUpperCase())}</div>`,iconSize:[30,30]}); }
+function clearMarkers(){ Object.keys(markers).forEach(id=>{ map.removeLayer(markers[id]); delete markers[id]; }); }
+function showHiders(){
+  const t=now();
+  players().forEach(p=>{
+    if(p.team!=='hider'||p.caught) return;
+    const l=live[p.id]; if(!l||t-l.t>30000) return;
+    const ll=[l.lat,l.lng], age=Math.max(0,Math.round((t-l.t)/1000));
+    if(!markers[p.id]) markers[p.id]=L.marker(ll,{icon:pinIcon(p),zIndexOffset:900}).addTo(map).bindTooltip('',{permanent:true,direction:'top',offset:[0,-16]});
+    markers[p.id].setLatLng(ll).setTooltipContent(esc(p.name)+' · '+age+' s');
+  });
+}
+
+// alertes de proximité
+function showProx(text, level){
+  const el=$('#prox'); el.textContent='⚠ '+text; el.classList.add('on');
+  clearTimeout(proxTimer); proxTimer=setTimeout(()=>el.classList.remove('on'),4000);
+  playBeep(); setTimeout(()=>speak(text),300);
+  try{ navigator.vibrate&&navigator.vibrate(level===0?[400,100,400]:200); }catch(e){}
+}
+function proximity(el, mine){
+  if(el<0||mine.caught||!lastFix||!mine.team) return;
+  if(mine.team==='hider' && !PROX_HIDERS) return;
+  if(mine.team==='seeker' && !PROX_SEEKERS) return;
+  let best=1e9;
+  players().forEach(p=>{
+    if(p.id===me.pid||p.team===mine.team||!p.team||p.caught) return;
+    const l=live[p.id]; if(!l||now()-l.t>20000) return;
+    const d=dist(lastFix,l); if(d<best) best=d;
+  });
+  if(best>50){ if(best>60) lastLevel=99; return; }
+  const level = best<3 ? 0 : Math.ceil(best/10)*10;
+  if(level>lastLevel+10){ lastLevel=level; return; }   // il s'est éloigné : on réarme
+  if(level<lastLevel){
+    lastLevel=level;
+    showProx('Vous êtes à '+level+' mètre'+(level>1?'s':'')+' d’'+(mine.team==='hider'?'un chercheur':'un caché'), level);
+  }
+}
+
 function tick(){
   if(!game||!me||game.status!=='running'||!map) return;
-  const el=elapsed(), sp=game.speed, z=zoneInfo(el), mine=game.players[me.pid];
-  zoneC.setRadius(z.R); nextC.setRadius(z.nextR||z.R); nextC.setStyle({opacity:z.nextR?1:0});
+  const el=elapsed(), sp=game.speed, mine=game.players[me.pid], z=zoneAt(el), isHider=mine.team==='hider';
+  const P=game.pingEvery, pk=Math.floor(el/P);
+  const pingActive = el>=P && (el-pk*P) < game.pingLen*sp;
+
+  // zone
+  zoneC.setLatLng([z.c.lat,z.c.lng]); zoneC.setRadius(z.R);
+  if(z.next){ nextC.setLatLng([z.next.c.lat,z.next.c.lng]); nextC.setRadius(z.next.R); nextC.setStyle({opacity:1}); } else nextC.setStyle({opacity:0});
+
   // HUD
-  if(el<0){ $('#h1l').textContent='Départ dans'; $('#h1').textContent=fmt(-el); $('#h2').textContent=fmt(game.revealEvery/sp); }
+  if(el<0){ $('#h1l').textContent='Départ dans'; $('#h1').textContent=fmt(-el); $('#h2').textContent=fmt(P/sp); }
   else{
-    $('#h1l').textContent='Zone '+Math.round(z.R)+' m';
-    $('#h1').textContent = z.nextR ? fmt(((z.n+1)*game.shrinkEvery-el)/sp) : 'finale';
-    $('#h2').textContent = fmt(((Math.floor(el/game.revealEvery)+1)*game.revealEvery-el)/sp);
+    $('#h1l').textContent = (z.closing?'🔻 Se ferme ':'Zone ')+Math.round(z.R)+' m';
+    $('#h1').textContent = z.next ? fmt(z.nextIn/sp) : 'finale';
+    $('#h2l').textContent = pingActive ? 'Ping' : 'Prochain ping';
+    $('#h2').textContent = pingActive ? '🔴 EN COURS' : fmt(((pk+1)*P-el)/sp);
   }
-  if(el<game.duration){ $('#h3l').textContent='Destruction dans'; $('#h3').textContent=fmt((game.duration-Math.max(el,0))/sp+(el<0?0:0)); }
-  else{ $('#h3l').textContent='Point révélé'; $('#h3').textContent=fmt((game.duration+game.overtime-el)/sp); }
-  // point de destruction
-  if(el>=game.duration && !tgtM){
+  if(el<game.targetAt){ $('#h3l').textContent='Destruction dans'; $('#h3').textContent=fmt((game.targetAt-el)/sp); }
+  else{ $('#h3l').textContent='Fin de partie'; $('#h3').textContent=fmt((game.endAt-el)/sp); }
+
+  // zone de destruction
+  if(el>=game.targetAt && !tgtM){
     const tl=[game.target.lat,game.target.lng];
     tgtM=L.marker(tl,{icon:L.divIcon({className:'',html:'<div class="tgt">💥</div>',iconSize:[30,30]})}).addTo(map);
     tgtC=L.circle(tl,{radius:TARGET_RADIUS,color:'#ef4444',weight:2}).addTo(map);
   }
-  // relevé de position toutes les 5 min
-  const k=Math.floor(el/game.revealEvery);
-  if(el>=0 && k>=1 && uploadedTick<k && lastFix){
-    uploadedTick=k;
-    gref.child('players/'+me.pid+'/pos').set({lat:lastFix.lat,lng:lastFix.lng,t:firebase.database.ServerValue.TIMESTAMP,tick:k});
+
+  // position live + ping
+  pushLive(false);
+  if(pingActive && pingDone!==pk){
+    pingDone=pk;
+    if(isHider && !mine.caught){ pushLive(true); playSiren(); try{navigator.vibrate&&navigator.vibrate([500,200,500,200,500]);}catch(e){} }
+    else if(!isHider) playBeep();
   }
-  // hors zone
-  const b=$('#banner'); b.className='';
-  if(el<0){ b.textContent = mine.team==='hider' ? '🤫 Cache-toi ! Les chercheurs attendent.' : '⏳ Les cachés se cachent… patience.'; b.className='on'; }
-  else if(lastFix && dist(lastFix,game.center)>z.R && mine.team && !mine.caught){
-    b.textContent='⚠ Tu es hors de la zone ! Reviens dedans.'; b.className='on bad';
+  if(pingActive && !isHider) showHiders(); else clearMarkers();
+
+  // alertes de proximité
+  proximity(el, mine);
+
+  // bandeau
+  const b=$('#banner'); let msg='', cls='';
+  if(el<0){ msg = isHider ? '🤫 Cache-toi ! Les chercheurs attendent.' : '⏳ Les cachés se cachent… patience.'; cls='on'; }
+  else if(pingActive){ msg = isHider ? '🚨 TU ES REPÉRÉ ! Bouge !' : '👁 Cachés visibles pendant 5 s !'; cls='on bad'; }
+  else if(lastFix && dist(lastFix,z.c)>z.R && mine.team && !mine.caught){
+    msg='⚠ Tu es hors de la zone ! Reviens dedans.'; cls='on bad';
     if(Date.now()-lastVibe>15000){ lastVibe=Date.now(); try{navigator.vibrate&&navigator.vibrate([300,100,300]);}catch(e){} }
-  } else if(el>=game.duration){ b.textContent='💥 Le point de destruction est visible ! Cachés : rejoignez-le.'; b.className='on'; }
+  } else if(el>=game.targetAt){ msg='💥 Zone de destruction visible ! Cachés : rejoignez-la.'; cls='on'; }
+  b.textContent=msg; b.className=cls;
   renderPlayers();
+
   // fin de partie
   const hs=players().filter(p=>p.team==='hider');
   if(hs.length && hs.every(p=>p.caught)) endGame('seekers','Tous les cachés ont été trouvés.');
-  else if(el>game.duration+game.overtime) endGame('seekers',"Le point n'a pas été détruit à temps.");
+  else if(el>game.endAt) endGame('seekers',"Le point n'a pas été détruit à temps.");
 }
 setInterval(tick,1000);
 
